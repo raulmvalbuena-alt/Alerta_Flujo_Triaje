@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flujo de alerta Urgencias</title>
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: consola de sala de control — barra de estado arriba, mando de simulación, y tres columnas (móvil del responsable · flujo · reglas del bloque) */
+:root{
+  --bg:#EEF1F6; --surface:#FFFFFF; --surface-2:#E6EBF2; --ink:#141D2E; --ink-2:#56627A; --line:#D2D9E4; --edge:#9AA6BA;
+  --accent:#1D5BD6; --accent-soft:#DCE6FA; --on-accent:#FFFFFF;
+  --ok:#17845A; --ok-soft:#DCF1E6; --warn:#A86F07; --warn-soft:#FAEFD2; --crit:#C42B37; --crit-soft:#F9DCDF; --on-crit:#FFFFFF;
+  --phone-bg:#E4ECE7; --bubble:#FFFFFF; --bubble-me:#D6F0DC; --frame:#1E2738;
+  --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C121C; --surface:#141C2A; --surface-2:#1B2537; --ink:#E5EBF4; --ink-2:#98A5BB; --line:#283450; --edge:#56637C;
+  --accent:#78A2F4; --accent-soft:#1A2B4D; --on-accent:#0A1324;
+  --ok:#4CC08A; --ok-soft:#12301F; --warn:#E4AC3D; --warn-soft:#382A0E; --crit:#F2737C; --crit-soft:#3C191D; --on-crit:#1C0709;
+  --phone-bg:#0F1915; --bubble:#1B2537; --bubble-me:#173324; --frame:#36435C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C121C; --surface:#141C2A; --surface-2:#1B2537; --ink:#E5EBF4; --ink-2:#98A5BB; --line:#283450; --edge:#56637C;
+  --accent:#78A2F4; --accent-soft:#1A2B4D; --on-accent:#0A1324;
+  --ok:#4CC08A; --ok-soft:#12301F; --warn:#E4AC3D; --warn-soft:#382A0E; --crit:#F2737C; --crit-soft:#3C191D; --on-crit:#1C0709;
+  --phone-bg:#0F1915; --bubble:#1B2537; --bubble-me:#173324; --frame:#36435C; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45}
+.app{max-width:1460px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.eyebrow{font:500 11px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--font-display);font-weight:800;font-size:clamp(22px,3vw,30px);line-height:1.1;margin:8px 0 4px;letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--ink-2);margin:0;max-width:68ch}
+.demo-tag{font:500 11px var(--font-mono);border:1px dashed var(--edge);padding:6px 10px;border-radius:999px;color:var(--ink-2)}
+
+/* Estado de la sala */
+.status{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.lbl{font:500 10.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.val{font:700 26px/1.1 var(--font-display);font-variant-numeric:tabular-nums}
+.val small{font:500 13px var(--font-body);color:var(--ink-2);margin-left:3px}
+.sub{font-size:12px;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:7px;font:700 13px var(--font-display);letter-spacing:.07em;text-transform:uppercase;padding:5px 11px;border-radius:999px;width:max-content}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.lv-verde{color:var(--ok);background:var(--ok-soft)}
+.lv-amarillo{color:var(--warn);background:var(--warn-soft)}
+.lv-rojo{color:var(--crit);background:var(--crit-soft)}
+.stat .val.warn{color:var(--warn)} .stat .val.crit{color:var(--crit)}
+
+/* Mandos */
+.controls{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
+.ctl-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.controls label{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+select,.btn{font:500 13px var(--font-body);color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-height:36px}
+select{max-width:220px}
+.btn{cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);min-width:92px;font-weight:600}
+.btn.ghost{background:transparent}
+input[type=range]{accent-color:var(--accent);width:130px}
+output{font:500 13px var(--font-mono);color:var(--ink);min-width:6ch}
+
+/* Zona de trabajo */
+.work{display:grid;grid-template-columns:290px minmax(0,1fr) 330px;gap:14px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+.card>header{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;justify-content:space-between}
+.card>header h2{font:700 15px var(--font-display);margin:0}
+.card>header small{color:var(--ink-2);font-size:12px}
+.flow-scroll{overflow-x:auto;padding:6px 8px 2px}
+#flow{width:100%;min-width:720px;height:auto;display:block}
+.template-note{margin:0;padding:10px 14px 14px;color:var(--ink-2);font-size:12.5px;border-top:1px solid var(--line)}
+.template-note b{color:var(--ink)}
+
+/* Flujo SVG */
+.node{cursor:pointer;outline:none}
+.node .box{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+.node .nt{font:700 14.5px var(--font-display);fill:var(--ink)}
+.node .ns{font:400 10.5px var(--font-mono);fill:var(--ink-2)}
+.node:hover .box{stroke:var(--edge)}
+.node.visited .box{stroke:var(--accent);stroke-opacity:.55}
+.node.active .box{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2.5;stroke-opacity:1}
+.node.active .ns{fill:var(--accent)}
+.node .sel{fill:none;stroke:none}
+.node.selected .sel{stroke:var(--ink);stroke-width:1.2;stroke-dasharray:4 3}
+.node:focus-visible .sel{stroke:var(--accent);stroke-width:2;stroke-dasharray:none}
+.node .ring{fill:none;stroke:none;transform-box:fill-box;transform-origin:center}
+.node.active .ring{stroke:var(--accent);stroke-width:2;animation:ring 1.6s ease-out infinite}
+@keyframes ring{from{opacity:.55;transform:scale(1)}to{opacity:0;transform:scale(1.12)}}
+.node .lvdot{fill:transparent}
+#flow[data-lv="amarillo"] .node.active .lvdot{fill:var(--warn)}
+#flow[data-lv="rojo"] .node.active .lvdot{fill:var(--crit)}
+.edge{fill:none;stroke:var(--edge);stroke-width:1.5}
+.edge.hot{stroke:var(--accent);stroke-width:2.8}
+.elabel{font:500 10px var(--font-mono);fill:var(--ink-2);paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.elabel.hot{fill:var(--accent);font-weight:600}
+.arr{fill:var(--edge)} .arr-hot{fill:var(--accent)}
+@media (prefers-reduced-motion:reduce){.node .ring{animation:none!important;stroke:none!important}}
+
+/* Móvil */
+.phone-col{display:grid;gap:8px;min-width:0}
+.col-label{font:500 10.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.roles{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.role-tab{font:600 11.5px var(--font-body);padding:7px 2px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;position:relative}
+.role-tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.badge{position:absolute;top:-7px;right:-4px;background:var(--crit);color:var(--on-crit);font:700 10px/16px var(--font-mono);min-width:16px;height:16px;border-radius:8px;padding:0 4px}
+.phone{border:8px solid var(--frame);border-radius:30px;background:var(--phone-bg);height:560px;display:flex;flex-direction:column;overflow:hidden}
+.ph-head{background:var(--surface);padding:12px 12px 10px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line)}
+.ava{flex:none;width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font:700 12px var(--font-display)}
+.ph-who{min-width:0}
+.ph-who b{display:block;font-size:13px}
+.ph-who span{display:block;font-size:11.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph-body{flex:1;overflow-y:auto;padding:12px 10px;display:flex;flex-direction:column;gap:10px}
+.ph-empty{margin:auto;text-align:center;color:var(--ink-2);font-size:12.5px;max-width:22ch}
+.bubble{background:var(--bubble);border-radius:4px 12px 12px 12px;padding:9px 11px 7px;box-shadow:0 1px 0 var(--line);max-width:94%;font-size:12.5px;align-self:flex-start}
+.bubble.out{align-self:flex-end;background:var(--bubble-me);border-radius:12px 4px 12px 12px}
+.bt{font:700 12px var(--font-display);letter-spacing:.05em;display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.bt::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--edge);flex:none}
+.bubble[data-lv="amarillo"] .bt::before{background:var(--warn)}
+.bubble[data-lv="rojo"] .bt::before{background:var(--crit)}
+.bubble[data-lv="verde"] .bt::before{background:var(--ok)}
+.bubble .ctx{color:var(--ink-2);font-size:11.5px;margin-bottom:4px}
+.bubble .ln{margin:0}
+.bubble .note{margin-top:4px;color:var(--ink-2);font-style:italic}
+.tm{font:400 10px var(--font-mono);color:var(--ink-2);text-align:right;margin-top:3px}
+.acts{display:grid;gap:6px;margin-top:8px}
+.acts button,.acts select{width:100%;border-radius:8px;padding:7px 8px;font:600 12.5px var(--font-body);cursor:pointer;border:1px solid var(--line);background:var(--surface-2);color:var(--ink)}
+.acts .go{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.acts .no{color:var(--crit)}
+.acts .row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.st{margin-top:6px;font-size:11.5px;font-weight:600;color:var(--ok)}
+.st.off{color:var(--ink-2)}
+
+/* Reglas */
+.cfg{padding:14px;display:grid;gap:16px}
+.cfg h3{font:700 20px var(--font-display);margin:0}
+.cfg .what{margin:0;color:var(--ink);max-width:60ch}
+.sect-t{font:500 10.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin:0 0 8px}
+.params{display:grid;gap:8px}
+.param{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13px}
+.param .inp{display:flex;align-items:center;gap:6px;font:400 11.5px var(--font-mono);color:var(--ink-2)}
+.param input{width:70px;font:500 13px var(--font-mono);background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums}
+.fixed{font-size:12.5px;color:var(--ink-2);margin:0}
+.qs{margin:0;padding-left:18px;display:grid;gap:5px;font-size:13px}
+.roster{width:100%;border-collapse:collapse;font-size:12px}
+.roster th,.roster td{text-align:left;padding:6px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.roster th{font:500 10.5px var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.roster td.now{background:var(--accent-soft)}
+.reasons{margin:0;padding-left:18px;font-size:13px;display:grid;gap:3px}
+.reset-cfg{justify-self:start}
+
+/* Parte inferior */
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px;align-items:start}
+.stack{display:grid;gap:14px;min-width:0}
+.chart-wrap{padding:8px 12px 10px}
+#spark{width:100%;height:auto;display:block}
+.spark-grid{stroke:var(--line);stroke-width:1}
+.spark-thr{stroke-width:1.2;stroke-dasharray:5 4;fill:none}
+.spark-txt{font:400 10px var(--font-mono);fill:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--ink-2);padding:0 12px 12px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 16px;margin:0;padding:14px;font-size:13px}
+.kv dt{color:var(--ink-2)}
+.kv dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.ep-empty{padding:14px;margin:0;color:var(--ink-2)}
+#log{list-style:none;margin:0;padding:6px 0;max-height:430px;overflow-y:auto}
+#log li{display:grid;grid-template-columns:42px 104px minmax(0,1fr);gap:10px;padding:7px 14px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:baseline}
+#log li:last-child{border-bottom:0}
+#log .lt{font:500 11.5px var(--font-mono);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.chip{font:600 10px var(--font-mono);letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--surface-2);color:var(--ink-2);width:max-content;max-width:100%}
+.chip.c-disparo,.chip.c-escalado{background:var(--warn-soft);color:var(--warn)}
+.chip.c-escalado{background:var(--crit-soft);color:var(--crit)}
+.chip.c-acuse,.chip.c-cierre{background:var(--ok-soft);color:var(--ok)}
+.chip.c-notificacion,.chip.c-reevaluacion,.chip.c-feedback{background:var(--accent-soft);color:var(--accent)}
+
+@media (max-width:1180px){
+  .work{grid-template-columns:290px minmax(0,1fr)}
+  .flow-col{grid-column:1/-1;order:-1}
+}
+@media (max-width:900px){.bottom{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:680px){
+  .work{grid-template-columns:minmax(0,1fr)}
+  .phone-col{width:100%;max-width:360px;justify-self:center}
+  #log li{grid-template-columns:40px minmax(0,1fr)}
+  #log li .chip{grid-column:2}
+  #log li .lx{grid-column:2}
+  .val{font-size:22px}
+}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Command Center · HQS del Vallès</div>
+      <h1>Flujo de alerta: espera hasta triaje en Urgencias adultos</h1>
+      <p class="lede">Simulación de una alerta de principio a fin: cuándo salta, a quién avisa, cuánto se silencia, cuándo se reactiva, cómo escala y cómo se cierra o se anula.</p>
+    </div>
+    <span class="demo-tag">Datos simulados · valores de partida para validar</span>
+  </header>
+
+  <section class="status" aria-label="Estado de la sala de espera">
+    <div class="stat"><span class="lbl">Hora simulada</span><span class="val" id="sClock">10:00</span><span class="sub" id="sShift">Laborable · mañana</span></div>
+    <div class="stat"><span class="lbl">Esperando triaje</span><span class="val" id="sN">0</span><span class="sub" id="sNsub">pacientes</span></div>
+    <div class="stat"><span class="lbl">Espera más larga</span><span class="val" id="sMax">0</span><span class="sub" id="sMed">mediana 0 min</span></div>
+    <div class="stat"><span class="lbl">Carga de enfermería</span><span class="val" id="sLoad">0</span><span class="sub" id="sBoxes">boxes de triaje</span></div>
+    <div class="stat"><span class="lbl">Nivel de la alerta</span><span class="pill lv-verde" id="sLevel">Verde</span><span class="sub" id="sAlert">En vigilancia</span></div>
+  </section>
+
+  <section class="controls" aria-label="Mandos de la simulación">
+    <div class="ctl-group">
+      <button class="btn primary" id="bPlay" type="button">Pausar</button>
+      <button class="btn" id="bStep" type="button">+1 min</button>
+      <label for="selSpeed">Velocidad
+        <select id="selSpeed">
+          <option value="1000">1 min por segundo</option>
+          <option value="450" selected>Normal</option>
+          <option value="140">Rápida</option>
+        </select>
+      </label>
+    </div>
+    <div class="ctl-group">
+      <label for="selSc">Escenario <select id="selSc"></select></label>
+      <label for="selMode">Respuesta
+        <select id="selMode">
+          <option value="auto">Automática (asume a los 3 min)</option>
+          <option value="manual">Manual (respondes tú en el móvil)</option>
+          <option value="nadie">Nadie responde</option>
+          <option value="anular">El responsable la anula</option>
+        </select>
+      </label>
+    </div>
+    <div class="ctl-group">
+      <label for="rngRate">Llegadas/hora</label>
+      <input type="range" id="rngRate" min="0" max="60" step="1" value="30">
+      <output id="oRate" for="rngRate">30</output>
+      <button class="btn" id="bBurst" type="button">+8 pacientes de golpe</button>
+      <button class="btn ghost" id="bReset" type="button">Reiniciar</button>
+    </div>
+  </section>
+
+  <main class="work">
+    <section class="phone-col" aria-label="Móvil del responsable">
+      <span class="col-label">Móvil de quien recibe el aviso</span>
+      <div class="roles" role="tablist" id="roleTabs"></div>
+      <div class="phone">
+        <div class="ph-head"><div class="ava">CC</div><div class="ph-who"><b>Command Center HQS</b><span id="phWho"></span></div></div>
+        <div class="ph-body" id="phBody"></div>
+      </div>
+    </section>
+
+    <section class="card flow-col">
+      <header><h2>Flujo de la alerta</h2><small>Pulsa un bloque para ver y cambiar sus reglas</small></header>
+      <div class="flow-scroll"><svg id="flow" viewBox="0 0 940 420" role="img" aria-label="Diagrama del flujo de la alerta"></svg></div>
+      <p class="template-note"><b>Plantilla para todas las alertas del Command Center.</b> Cada alerta tiene que definir estos nueve bloques: qué se vigila, cuándo salta, a quién avisa según turno, plazo de acuse, silencio, reevaluación, escalado, cierre con feedback y anulación con motivo.</p>
+    </section>
+
+    <aside class="card config-col" id="config" aria-live="polite"></aside>
+  </main>
+
+  <section class="bottom">
+    <div class="stack">
+      <div class="card">
+        <header><h2>Espera hasta triaje</h2><small>últimos 120 min</small></header>
+        <div class="chart-wrap"><svg id="spark" viewBox="0 0 600 170" role="img" aria-label="Evolución de la espera"></svg></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>Espera más larga</span><span><i style="background:var(--ink-2)"></i>Mediana</span><span><i style="background:var(--crit)"></i>Umbral rojo</span><span><i style="background:var(--warn)"></i>Umbral amarillo (mediana)</span></div>
+      </div>
+      <div class="card" id="episode"></div>
+    </div>
+    <div class="card">
+      <header><h2>Registro de eventos</h2><small>lo más reciente arriba</small></header>
+      <ol id="log"></ol>
+    </div>
+  </section>
+</div>
+
+<script id="sim">
+/* ===== Núcleo de simulación (sin DOM) ===== */
+const CFG_DEFAULT = {
+  amarMediana:15, amarPacientes:10, rojoMax:30, persist:5,
+  maxAvisosHora:3, ackMax:10, silencio:20, mejora:20, seguimientoCada:5,
+  escReact:2, escRojoMin:60, cierreEstable:10, bloqueoAnul:60, minTriaje:6
+};
+let cfg = Object.assign({}, CFG_DEFAULT);
+
+const SCENARIOS = {
+  rapido:  {name:'Se resuelve rápido', start:10*60, weekend:false, mode:'auto', initial:8, gap:1.2, rate:t=>t<28?30:14, maxExtra1:1},
+  reactiva:{name:'Se reactiva y escala', start:16*60, weekend:false, mode:'auto', initial:9, gap:1.3, rate:()=>38, maxExtra1:1},
+  nadie:   {name:'Nadie responde', start:11*60, weekend:false, mode:'nadie', initial:9, gap:1.3, rate:()=>27, maxExtra1:1},
+  anula:   {name:'Anulación con motivo', start:12*60, weekend:false, mode:'anular', initial:10, gap:1.2, rate:t=>t<40?32:14, maxExtra1:1},
+  noche:   {name:'Turno de noche', start:23*60, weekend:false, mode:'auto', initial:6, gap:1.5, rate:t=>t<30?22:8, maxExtra1:1, boxes:1, nurses:4}
+};
+
+const ROLES = {
+  sup: {short:'Supervisión', full:g=>g?'Supervisora de guardia del hospital':'Supervisora de enfermería de Urgencias'},
+  med: {short:'Médico', full:g=>g?'Médico de guardia de Urgencias':'Médico adjunto responsable de Urgencias'},
+  jefe:{short:'Jefatura', full:g=>g?'Jefe/a de guardia':'Jefe/a de servicio de Urgencias'},
+  dir: {short:'Dirección', full:g=>g?'Directivo/a de guardia':'Dirección asistencial'}
+};
+const ROLE_ORDER = ['sup','med','jefe','dir'];
+const REASONS = [
+  'Error de datos: la integración con el HIS no actualiza',
+  'Plan de catástrofe activado: llegada masiva ya gestionada',
+  'Ya se ha comunicado por otra vía',
+  'Otro motivo (texto libre)'
+];
+const FB_ACTIONS = ['Abrir box de triaje adicional','Reasignar enfermera a triaje','Llamar refuerzo','Ninguna: se resolvió sola'];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+let S, sc, rng;
+
+function clock(t){const a=sc.start+t;const h=Math.floor(a/60)%24, m=((a%60)+60)%60;return String(h).padStart(2,'0')+':'+String(Math.floor(m)).padStart(2,'0')}
+function shift(t){const h=Math.floor((sc.start+t)/60)%24;const fr=h>=8&&h<15?'mañana':h>=15&&h<22?'tarde':'noche';return {fr, guardia: fr==='noche'||sc.weekend}}
+function roleName(r){return ROLES[r].full(shift(S.t).guardia)}
+function up(l){return l?l.toUpperCase():''}
+function fem(l){return l==='rojo'?'roja':l==='amarillo'?'amarilla':l}
+function rank(l){return l==='rojo'?2:l==='amarillo'?1:0}
+function load(){return ((sc.enBoxes||18)+S.m.n)/S.nurses}
+function fmt1(x){return x.toFixed(1).replace('.',',')}
+
+function reset(key){
+  sc = SCENARIOS[key]; rng = mulberry32(11);
+  S = {key, t:0, waiting:[], arrAcc:0, capAcc:0, boxes:sc.boxes||2, nurses:sc.nurses||6, extraFirst:0,
+    alert:'normal', persist:0, level:'verde', m:{n:0,max:0,med:0},
+    alertLevel:null, notified:new Set(), ackDeadline:null, notifiedAt:null, round:0, roundType:'base',
+    escLevel:0, reactivations:0, redSince:null, redEscalated:false,
+    ackedBy:null, silenceEnd:null, snapshot:null, stable:0, nextCheck:null, suppressUntil:null,
+    queue:[], msgs:{sup:[],med:[],jefe:[],dir:[]}, sent:[], log:[], hist:[],
+    flash:null, hot:{}, visited:new Set(['monitor']), episode:null, lastEpisode:null, episodes:0,
+    mode:sc.mode, rateOverride:null, msgSeq:0, ver:1, lastMsgRole:null, logSeq:0};
+  for(let i=0;i<sc.initial;i++) S.waiting.push(-(sc.initial-i)*sc.gap);
+  compute(); S.hist.push({t:0, max:S.m.max, med:S.m.med});
+  addLog('Monitorización', `Escenario «${sc.name}». El Command Center recalcula la espera de cada paciente cada minuto.`);
+}
+
+function compute(){
+  const w = S.waiting.map(a=>S.t-a);
+  const n=w.length, max=n?w[0]:0, s=[...w].sort((a,b)=>a-b);
+  const med = n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):0;
+  S.m={n, max:Math.max(0,Math.round(max)), med:Math.max(0,Math.round(med))};
+  S.level = S.m.max>=cfg.rojoMax?'rojo':(S.m.med>=cfg.amarMediana||n>=cfg.amarPacientes)?'amarillo':'verde';
+}
+function currentRate(){return S.rateOverride!=null?S.rateOverride:sc.rate(S.t)}
+
+function addLog(cat,text,lv){S.log.unshift({id:++S.logSeq,t:S.t,cat,text,lv}); if(S.log.length>300) S.log.pop()}
+function hot(id){S.hot[id]=S.t+3}
+function flash(node){S.flash={node,t:S.t}}
+
+function recipients(level){
+  const r = level==='rojo'?['sup','med']:['sup'];
+  if(S.escLevel>=1) r.push('jefe'); if(S.escLevel>=2) r.push('dir');
+  return r;
+}
+function buildMsg(title,note,actionable){
+  return {kind:actionable?'alerta':'info', lv:S.alertLevel, title, note, pending:!!actionable,
+    lines:[`${S.m.n} pacientes esperando triaje`, `Espera más larga ${S.m.max} min · mediana ${S.m.med} min`, `Carga: ${fmt1(load())} pacientes por enfermera · ${S.boxes} box${S.boxes>1?'es':''} de triaje`]};
+}
+function sendMsg(role,msg,force){
+  const recent = S.sent.filter(s=>s.role===role && s.t>S.t-60).length;
+  if(!force && recent>=cfg.maxAvisosHora){
+    addLog('Notificación', `Aviso a ${ROLES[role].short} retenido: ya ha recibido ${recent} en la última hora (límite ${cfg.maxAvisosHora}). Irá en el siguiente resumen.`);
+    if(S.episode) S.episode.held++;
+    return false;
+  }
+  S.sent.push({role,t:S.t}); msg.id=++S.msgSeq; msg.t=S.t; S.msgs[role].push(msg); S.notified.add(role);
+  S.lastMsgRole=role; S.ver++; return true;
+}
+function outMsg(role,text){S.msgs[role].push({id:++S.msgSeq,t:S.t,kind:'out',text}); S.lastMsgRole=role; S.ver++}
+function markPending(status){
+  ROLE_ORDER.forEach(r=>S.msgs[r].forEach(m=>{if(m.kind==='alerta'&&m.pending){m.pending=false;m.status=status}})); S.ver++;
+}
+function hasPending(role){return S.msgs[role].some(m=>m.kind==='alerta'&&m.pending)}
+
+function newRound(type,roles,title,note,force,primary){
+  S.round++; S.roundType=type; S.notifiedAt=S.t; S.ackDeadline=S.t+cfg.ackMax;
+  const sentTo=[];
+  roles.forEach(r=>{if(sendMsg(r,buildMsg(title,note,true),force)) sentTo.push(r)});
+  if(sentTo.length) addLog('Notificación', `«${title}» enviada por WhatsApp a ${sentTo.map(roleName).join(' y ')}. Plazo para asumirla: ${cfg.ackMax} min.`, S.alertLevel);
+  hot('e_na'); flash(type==='esc'?'escalado':'notificacion');
+  scheduleAuto(primary||roles[0]);
+}
+function scheduleAuto(role){
+  const round=S.round;
+  if(S.mode==='auto') S.queue.push({t:S.t+3, fn:()=>{if(S.alert==='notificada'&&S.round===round&&hasPending(role)) ack(role,'asumo')}});
+  else if(S.mode==='anular') S.queue.push({t:S.t+2, fn:()=>{if(S.alert==='notificada'&&S.round===round&&hasPending(role)) annul(role,REASONS[1])}});
+}
+
+function startEpisode(){
+  S.episode={n:++S.episodes,start:S.t,fired:null,firstAck:null,ackBy:null,reacts:0,esc:0,held:0,maxLevel:S.level,outcome:null,end:null,feedback:null,reason:null,incident:false};
+  S.visited=new Set(['monitor','disparo']);
+}
+function endEpisode(outcome){
+  const e=S.episode; if(!e) return;
+  e.outcome=outcome; e.end=S.t; e.reacts=S.reactivations; e.esc=S.escLevel;
+  S.lastEpisode=e; S.episode=null;
+}
+
+function fire(L){
+  S.alert='notificada'; S.alertLevel=L; S.escLevel=0; S.reactivations=0; S.redEscalated=false; S.notified=new Set(); S.ackedBy=null;
+  S.episode.fired=S.t; S.episode.maxLevel=L;
+  hot('e_dn');
+  addLog('Disparo', `Alerta ${fem(L)} confirmada: la condición se ha mantenido ${cfg.persist} min.`, L);
+  newRound('base', recipients(L), `ALERTA ${up(fem(L))}`, null, true, 'sup');
+}
+
+function upgradeIfRed(){
+  if(S.level==='rojo' && S.alertLevel==='amarillo'){
+    S.alertLevel='rojo'; if(S.episode) S.episode.maxLevel='rojo';
+    addLog('Disparo', `Pasa a roja: un paciente lleva ${S.m.max} min sin triar.`, 'rojo');
+    const actionable = S.alert==='notificada';
+    recipients('rojo').filter(r=>!S.notified.has(r)).forEach(r=>{
+      const note = actionable?null:`Ya la ha asumido ${ROLES[S.ackedBy].short}. Solo para tu información.`;
+      if(sendMsg(r, buildMsg('PASA A ROJA', note, actionable), true))
+        addLog('Notificación', `Se avisa a ${roleName(r)} por el paso a rojo${actionable?'':' (informativo, sin pedir acuse)'}.`, 'rojo');
+    });
+  }
+}
+
+function ack(role,how){
+  if(S.alert!=='notificada') return;
+  const wait=S.t-S.notifiedAt;
+  S.ackedBy=role;
+  if(S.episode && S.episode.firstAck==null){S.episode.firstAck=S.t; S.episode.ackBy=role}
+  outMsg(role, how==='otro'?'Ya se está gestionando':'Asumo');
+  markPending(`${how==='otro'?'Gestionada':'Asumida'} por ${ROLES[role].short} · ${clock(S.t)}`);
+  S.alert='silencio'; S.silenceEnd=S.t+cfg.silencio; S.snapshot={...S.m, level:S.level}; S.stable=0;
+  hot('e_as'); flash('acuse');
+  addLog('Acuse', `${roleName(role)} ${how==='otro'?'indica que ya se está gestionando':'asume la alerta'} a los ${wait} min. Silencio hasta las ${clock(S.silenceEnd)}.`);
+  S.queue.push({t:S.t+3, fn:()=>mitigate(role)});
+}
+function mitigate(role){
+  if(role==='jefe'||role==='dir'){S.boxes+=2; addLog('Acción', `${ROLES[role].short} activa refuerzo: se abren 2 boxes de triaje más (${S.boxes} en total).`)}
+  else if(S.extraFirst<(sc.maxExtra1??1)){S.extraFirst++; S.boxes++; addLog('Acción', `Se abre un box de triaje adicional (${S.boxes} en total).`)}
+  else addLog('Acción', 'La primera línea no tiene más enfermeras para abrir otro box.');
+}
+
+function reevaluate(){
+  hot('e_sr'); flash('reevaluacion');
+  if(S.stable>=cfg.cierreEstable){close(); return}
+  if(S.level==='verde'){S.alert='estabilizando'; addLog('Reevaluación', `Indicadores por debajo del umbral. Faltan ${cfg.cierreEstable-S.stable} min estables para cerrar.`); return}
+  const sn=S.snapshot, k=1-cfg.mejora/100;
+  const improved = rank(S.level)<rank(sn.level) || S.m.max<=sn.max*k || S.m.n<=sn.n*k;
+  if(improved){
+    const was=S.alert; S.alert='seguimiento'; S.nextCheck=S.t+cfg.seguimientoCada;
+    if(was!=='seguimiento') addLog('Reevaluación', `Mejora respecto al acuse (espera más larga ${sn.max}→${S.m.max} min, ${sn.n}→${S.m.n} pacientes). Seguimiento sin avisar; revisión cada ${cfg.seguimientoCada} min.`);
+  } else reactivate(`sigue igual o peor que al asumirla (${sn.max}→${S.m.max} min, ${sn.n}→${S.m.n} pacientes)`);
+}
+function reactivate(reason){
+  S.reactivations++; hot('e_rn'); flash('reevaluacion');
+  if(S.level==='rojo'){S.alertLevel='rojo'; if(S.episode) S.episode.maxLevel='rojo'}
+  addLog('Reevaluación', `Reactivada (${S.reactivations}ª vez): ${reason}.`, S.level);
+  if(S.reactivations>=cfg.escReact && S.escLevel<1){escalate(`${S.reactivations} reactivaciones sin resolverse`,1,'e_re'); return}
+  S.alert='notificada';
+  const roles=[...new Set([...(S.ackedBy?[S.ackedBy]:[]), ...recipients(S.alertLevel)])];
+  newRound('base', roles, `REACTIVADA (${S.reactivations}ª)`, `Motivo: ${reason}`, false, S.ackedBy||'sup');
+}
+function escalate(reason,toLevel,edge){
+  const target=Math.min(2, toLevel??S.escLevel+1);
+  if(target<=S.escLevel){
+    if(S.alert==='notificada'){
+      const first=S.episode&&!S.episode.incident; if(S.episode) S.episode.incident=true;
+      addLog('Escalado', first?'Nadie la ha asumido en ningún nivel. Queda registrada como incidencia del sistema de alertas y se repite el aviso a todos cada 30 min.':'Sigue sin asumirse. Se repite el aviso.', 'rojo');
+      const all=ROLE_ORDER.filter(r=>S.notified.has(r));
+      newRound('esc', all, 'RECORDATORIO: SIN ASUMIR', 'Nadie ha asumido todavía esta alerta', false, all[all.length-1]);
+      S.ackDeadline=S.t+30;
+    }
+    return;
+  }
+  const roles=[]; for(let l=S.escLevel+1;l<=target;l++) roles.push(l===1?'jefe':'dir');
+  S.escLevel=target; S.alert='notificada';
+  hot(edge||'e_ae'); hot('e_ea');
+  addLog('Escalado', `Escala a nivel ${target} (${roles.map(roleName).join(' y ')}): ${reason}.`, S.alertLevel);
+  newRound('esc', roles, `ESCALADA · NIVEL ${target}`, `Motivo: ${reason}`, true, roles[roles.length-1]);
+}
+function close(){
+  const dur=S.t-S.episode.fired;
+  hot('e_rc'); hot('e_cm'); flash('cierre');
+  addLog('Cierre', `Indicadores bajo el umbral durante ${cfg.cierreEstable} min. Alerta cerrada a los ${dur} min del disparo.`, 'verde');
+  const r=S.ackedBy;
+  if(r){
+    sendMsg(r,{kind:'feedback', lv:'verde', title:'ALERTA CERRADA', pending:true, lines:[`Duración: ${dur} min desde el aviso`, '¿Qué hiciste y te sirvió el aviso?']}, true);
+    if(S.mode==='auto') S.queue.push({t:S.t+1, fn:()=>{const m=[...S.msgs[r]].reverse().find(x=>x.kind==='feedback'&&x.pending); if(m) feedback(r,m.id,(r==='jefe'||r==='dir')?FB_ACTIONS[2]:FB_ACTIONS[0],true)}});
+  }
+  endEpisode('Cerrada');
+  S.alert='normal'; S.persist=0; S.alertLevel=null; S.escLevel=0; S.redEscalated=false;
+}
+function feedback(role,id,accion,util){
+  const m=S.msgs[role].find(x=>x.id===id); if(!m||!m.pending) return;
+  m.pending=false; m.status='Respuesta enviada';
+  outMsg(role, `${accion} · Aviso ${util?'útil':'no útil'}`);
+  addLog('Feedback', `${ROLES[role].short}: «${accion}». Aviso ${util?'útil':'no útil'}. Se guarda para ajustar umbrales.`);
+  if(S.lastEpisode) S.lastEpisode.feedback=`${accion} · ${util?'útil':'no útil'}`;
+}
+function annul(role,reason){
+  if(S.alert!=='notificada') return;
+  outMsg(role, `Anular: ${reason}`);
+  markPending(`Anulada por ${ROLES[role].short} · ${clock(S.t)}`);
+  hot('e_nx'); flash('anulacion');
+  addLog('Anulación', `${roleName(role)} anula la alerta. Motivo: «${reason}». No volverá a saltar durante ${cfg.bloqueoAnul} min.`);
+  S.ackedBy=role; if(S.episode){S.episode.reason=reason; if(S.episode.firstAck==null){S.episode.firstAck=S.t;S.episode.ackBy=role}}
+  endEpisode('Anulada');
+  S.alert='normal'; S.suppressUntil=S.t+cfg.bloqueoAnul; S.persist=0; S.alertLevel=null; S.escLevel=0;
+  if(S.mode==='anular'){S.mode='auto'; addLog('Monitorización','En la demo, a partir de aquí la respuesta pasa a automática.')}
+}
+
+function alertStep(){
+  const L=S.level;
+  if(L==='rojo' && S.episode && S.episode.fired!=null){if(S.redSince==null) S.redSince=S.t} else S.redSince=null;
+  switch(S.alert){
+    case 'normal':
+      if(S.suppressUntil!=null){
+        if(S.t>=S.suppressUntil){S.suppressUntil=null; hot('e_xm'); addLog('Anulación','Fin del bloqueo. La alerta vuelve a vigilar.')}
+        else break;
+      }
+      if(L!=='verde'){S.alert='pre'; S.persist=1; startEpisode(); hot('e_md');
+        addLog('Disparo', `Se supera el umbral ${L} (${S.m.n} pacientes, mediana ${S.m.med} min, más larga ${S.m.max} min). Debe mantenerse ${cfg.persist} min.`, L)}
+      break;
+    case 'pre':
+      if(L==='verde'){S.alert='normal'; S.persist=0; S.episode=null; S.episodes--; addLog('Disparo','La condición desaparece antes de confirmarse. No se avisa a nadie.'); break}
+      S.persist++; if(S.persist>=cfg.persist) fire(L);
+      break;
+    case 'notificada':
+      upgradeIfRed();
+      if(S.t>=S.ackDeadline) escalate(`nadie la ha asumido en ${cfg.ackMax} min`);
+      break;
+    case 'silencio':
+      upgradeIfRed();
+      S.stable = L==='verde'?S.stable+1:0;
+      if(S.stable>=cfg.cierreEstable || S.t>=S.silenceEnd) reevaluate();
+      break;
+    case 'seguimiento':
+      upgradeIfRed();
+      if(L==='verde'){S.alert='estabilizando'; S.stable=1; addLog('Reevaluación','Indicadores por debajo del umbral. Empieza la cuenta para el cierre.')}
+      else if(S.t>=S.nextCheck) reevaluate();
+      break;
+    case 'estabilizando':
+      if(L==='verde'){S.stable++; if(S.stable>=cfg.cierreEstable) close()}
+      else reactivate('vuelve a superar el umbral durante la cuenta de cierre');
+      break;
+  }
+  if(S.episode && ['notificada','silencio','seguimiento','estabilizando'].includes(S.alert) && S.redSince!=null && S.t-S.redSince>=cfg.escRojoMin && !S.redEscalated && S.escLevel<2){
+    S.redEscalated=true; escalate(`lleva ${cfg.escRojoMin} min seguidos en rojo`,2,'e_re');
+  }
+}
+
+function activeNode(){
+  if(S.flash && S.flash.t===S.t) return S.flash.node;
+  switch(S.alert){
+    case 'normal': return S.suppressUntil!=null?'anulacion':'monitor';
+    case 'pre': return 'disparo';
+    case 'notificada': return 'acuse';
+    case 'silencio': return 'silencio';
+    case 'seguimiento': return 'reevaluacion';
+    case 'estabilizando': return 'cierre';
+  }
+  return 'monitor';
+}
+
+function tick(){
+  S.t++;
+  const due=S.queue.filter(e=>e.t<=S.t); S.queue=S.queue.filter(e=>e.t>S.t); due.forEach(e=>e.fn());
+  S.arrAcc += currentRate()/60*(0.7+0.6*rng());
+  while(S.arrAcc>=1){S.waiting.push(S.t-rng()*0.9); S.arrAcc--}
+  S.waiting.sort((a,b)=>a-b);
+  S.capAcc += S.boxes/cfg.minTriaje;
+  while(S.capAcc>=1 && S.waiting.length){S.waiting.shift(); S.capAcc--}
+  if(!S.waiting.length) S.capAcc=Math.min(S.capAcc,1);
+  compute();
+  S.hist.push({t:S.t, max:S.m.max, med:S.m.med}); if(S.hist.length>121) S.hist.shift();
+  alertStep();
+  if(S.episode) S.visited.add(activeNode());
+}
+function burst(k){
+  for(let i=0;i<k;i++) S.waiting.push(S.t-i*0.05);
+  S.waiting.sort((a,b)=>a-b);
+  addLog('Monitorización', `Llegan ${k} pacientes a la vez (por ejemplo, varias ambulancias seguidas).`);
+  compute();
+}
+</script>
+
+<script>
+/* ===== Interfaz ===== */
+const NW=138, NH=66;
+const NODES = {
+  monitor:{x:20,y:30,title:'Monitorización'}, disparo:{x:210,y:30,title:'Disparo'}, notificacion:{x:400,y:30,title:'Notificación'},
+  acuse:{x:590,y:30,title:'Acuse'}, silencio:{x:780,y:30,title:'Silencio'},
+  cierre:{x:20,y:290,title:'Cierre'}, anulacion:{x:210,y:290,title:'Anulación'}, escalado:{x:570,y:290,title:'Escalado'}, reevaluacion:{x:780,y:290,title:'Reevaluación'}
+};
+const EDGES = [
+  {id:'e_md', d:'M158 63 H206', l:'supera', x:182, y:54},
+  {id:'e_dn', d:'M348 63 H396', l:'persiste', x:372, y:54},
+  {id:'e_na', d:'M538 63 H586', l:'envía', x:562, y:54},
+  {id:'e_as', d:'M728 63 H776', l:'Asumo', x:752, y:54},
+  {id:'e_sr', d:'M849 96 V286', l:'fin silencio', x:857, y:180, a:'start'},
+  {id:'e_rn', d:'M810 290 C 810 200, 500 210, 500 100', l:'reactivar', x:655, y:198},
+  {id:'e_ae', d:'M615 96 V286', l:'sin acuse', x:607, y:140, a:'end'},
+  {id:'e_ea', d:'M690 290 V100', l:'nuevo aviso', x:698, y:258, a:'start'},
+  {id:'e_re', d:'M780 323 H712', l:'reactiva ×2', x:745, y:314},
+  {id:'e_rc', d:'M849 356 V392 H89 V360', l:'estable · se cierra', x:470, y:410},
+  {id:'e_cm', d:'M60 290 V100', l:'feedback', x:68, y:200, a:'start'},
+  {id:'e_nx', d:'M430 96 C 430 200, 300 190, 300 286', l:'anular', x:378, y:182},
+  {id:'e_xm', d:'M240 290 C 240 200, 130 200, 130 100', l:'tras bloqueo', x:190, y:225}
+];
+const PARAM_META = {
+  amarMediana:['Amarillo: mediana de espera desde','min'], amarPacientes:['Amarillo: pacientes esperando desde','pac.'],
+  rojoMax:['Rojo: un paciente espera desde','min'], persist:['Tiempo que debe mantenerse antes de avisar','min'],
+  maxAvisosHora:['Máximo de avisos por persona y hora','avisos'], ackMax:['Plazo para asumirla','min'],
+  silencio:['Duración del silencio tras asumirla','min'], mejora:['Mejora mínima para no reactivar','%'],
+  seguimientoCada:['Revisión durante el seguimiento cada','min'], escReact:['Escala tras este número de reactivaciones','veces'],
+  escRojoMin:['Escala a dirección si sigue en rojo','min'], cierreEstable:['Minutos por debajo del umbral para cerrar','min'],
+  bloqueoAnul:['Bloqueo tras anularla','min'], minTriaje:['Simulación: duración de un triaje','min']
+};
+const INFO = {
+  monitor:{what:'El Command Center lee del sistema de Urgencias la hora de admisión y la de triaje de cada paciente, y recalcula los indicadores cada minuto.',
+    params:['minTriaje'], fixed:'Frecuencia de cálculo: cada minuto. Indicadores: pacientes esperando, espera más larga y mediana.',
+    q:['¿El dato llega del HIS en tiempo real o con retraso?','Si la integración se cae, ¿lanzamos una alerta técnica aparte?','¿Medimos desde la admisión o desde la llegada a puerta?']},
+  disparo:{what:'La alerta salta cuando se supera un umbral y la condición se mantiene unos minutos, para no avisar por picos de un momento.',
+    params:['amarMediana','amarPacientes','rojoMax','persist'],
+    q:['¿Usamos la mediana, la espera más larga o el percentil 90?','¿Los umbrales cambian de día y de noche?','¿El rojo debe saltar sin esperar la persistencia?']},
+  notificacion:{what:'El aviso va a personas concretas según el nivel y el turno, con los datos justos para decidir y botones de respuesta. Para evitar la fatiga de alertas, se limita cuántos avisos recibe cada persona por hora.',
+    params:['maxAvisosHora'], roster:true,
+    q:['¿Canal oficial: WhatsApp corporativo, app propia o busca?','¿Quién mantiene al día el cuadrante de guardias?','¿Qué datos pueden ir en el mensaje sin incluir datos del paciente?']},
+  acuse:{what:'Alguien tiene que hacerse cargo. Leer el mensaje no basta: hay que pulsar «Asumo». Cualquiera de los avisados puede asumirla, y al hacerlo se retira el aviso a los demás.',
+    params:['ackMax'], q:['¿Basta con leerlo o exigimos pulsar?','Si la asume el médico, ¿se le quita el aviso a la supervisora?']},
+  silencio:{what:'Tras asumirla, la alerta deja de molestar el tiempo necesario para actuar. Si pasa a rojo, se informa al médico aunque esté silenciada. Si se normaliza antes, se cierra sin esperar.',
+    params:['silencio'], q:['¿Silencio fijo o distinto según el nivel?','¿El paso a rojo rompe el silencio para todos o solo informa?']},
+  reevaluacion:{what:'Al acabar el silencio se comparan los indicadores con los del momento en que se asumió. Si mejoran, sigue en seguimiento sin avisar. Si siguen igual o peor, se reactiva y vuelve a pedir acuse.',
+    params:['mejora','seguimientoCada'], q:['¿Qué consideramos «mejorar»?','¿Comparamos con el momento del acuse o con el umbral?']},
+  escalado:{what:'Sube de nivel si nadie la asume a tiempo, si se reactiva varias veces o si lleva demasiado tiempo en rojo. Si nadie responde en el último nivel, queda registrada como incidencia.',
+    params:['escReact','escRojoMin'], fixed:'El plazo para asumirla en cada nivel es el del bloque Acuse.',
+    q:['¿Escalado en cadena o en paralelo?','¿Se informa al nivel anterior de que ha escalado?','¿Quién es el nivel 2 en fin de semana y festivos?']},
+  cierre:{what:'Se cierra sola cuando los indicadores llevan un tiempo por debajo del umbral. Después pide a quien la asumió qué hizo y si el aviso le sirvió.',
+    params:['cierreEstable'], q:['¿El feedback es obligatorio o voluntario?','¿Quién revisa el feedback y cada cuánto se ajustan los umbrales?']},
+  anulacion:{what:'Quien la recibe puede anularla eligiendo un motivo de una lista cerrada. Durante el bloqueo no vuelve a saltar, y el motivo queda registrado para revisar la alerta.',
+    params:['bloqueoAnul'], reasons:true, q:['¿Quién puede anular?','¿El bloqueo es fijo o depende del motivo?']}
+};
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let selected='disparo', viewRole='sup', annulOpen=null, playing=true, timer=null, lastVer=-1, lastLog=-1, lastMsgRoleSeen=null, lastMsgSeq=0;
+
+/* Construcción del SVG del flujo */
+function buildFlow(){
+  const ns='http://www.w3.org/2000/svg';
+  let h=`<defs>
+    <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path class="arr" d="M0 0 L8 4 L0 8 z"/></marker>
+    <marker id="arrHot" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path class="arr-hot" d="M0 0 L8 4 L0 8 z"/></marker></defs>`;
+  EDGES.forEach(e=>{h+=`<path id="${e.id}" class="edge" d="${e.d}" marker-end="url(#arr)"/>`});
+  EDGES.forEach(e=>{h+=`<text id="${e.id}_l" class="elabel" x="${e.x}" y="${e.y}" text-anchor="${e.a||'middle'}">${esc(e.l)}</text>`});
+  Object.entries(NODES).forEach(([id,n])=>{
+    h+=`<g class="node" data-id="${id}" tabindex="0" role="button" aria-label="${esc(n.title)}">
+      <rect class="ring" x="${n.x}" y="${n.y}" width="${NW}" height="${NH}" rx="9"/>
+      <rect class="box" x="${n.x}" y="${n.y}" width="${NW}" height="${NH}" rx="9"/>
+      <rect class="sel" x="${n.x-5}" y="${n.y-5}" width="${NW+10}" height="${NH+10}" rx="12"/>
+      <circle class="lvdot" cx="${n.x+NW-14}" cy="${n.y+15}" r="5"/>
+      <text class="nt" x="${n.x+13}" y="${n.y+28}">${esc(n.title)}</text>
+      <text class="ns" id="ns_${id}" x="${n.x+13}" y="${n.y+50}"></text></g>`;
+  });
+  $('flow').innerHTML=h;
+  $('flow').querySelectorAll('.node').forEach(g=>{
+    const pick=()=>{selected=g.dataset.id; renderConfig(); renderFlow()};
+    g.addEventListener('click',pick);
+    g.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();pick()}});
+  });
+}
+
+function nodeSub(id){
+  const rem=x=>Math.max(0,x-S.t);
+  switch(id){
+    case 'monitor': return S.alert==='normal'&&S.suppressUntil==null?'vigilando · cada 1 min':'cada 1 min · HIS';
+    case 'disparo': return S.alert==='pre'?`se mantiene ${S.persist}/${cfg.persist} min`:`≥${cfg.amarMediana} min · ≥${cfg.amarPacientes} pac`;
+    case 'notificacion': {const k=S.notified.size; return S.episode&&k?`${k} persona${k>1?'s':''} avisada${k>1?'s':''}`:'según nivel y turno'}
+    case 'acuse': return S.alert==='notificada'?`quedan ${rem(S.ackDeadline)} min`:`plazo ${cfg.ackMax} min`;
+    case 'silencio': return S.alert==='silencio'?`quedan ${rem(S.silenceEnd)} min`:`${cfg.silencio} min`;
+    case 'reevaluacion': return S.alert==='seguimiento'?'en seguimiento':S.reactivations?`${S.reactivations} reactivación${S.reactivations>1?'es':''}`:'al acabar el silencio';
+    case 'escalado': return S.escLevel?`nivel ${S.escLevel} de 2`:'jefatura · dirección';
+    case 'cierre': return S.alert==='estabilizando'?`estable ${S.stable}/${cfg.cierreEstable} min`:`+ feedback · ${cfg.cierreEstable} min`;
+    case 'anulacion': return S.suppressUntil!=null?`bloqueo ${rem(S.suppressUntil)} min`:'con motivo';
+  }
+}
+
+function renderFlow(){
+  const act=activeNode();
+  $('flow').dataset.lv = S.alertLevel||'verde';
+  $('flow').querySelectorAll('.node').forEach(g=>{
+    const id=g.dataset.id;
+    g.classList.toggle('active', id===act);
+    g.classList.toggle('visited', S.visited.has(id) && id!==act);
+    g.classList.toggle('selected', id===selected);
+    $('ns_'+id).textContent=nodeSub(id);
+  });
+  EDGES.forEach(e=>{
+    const h=(S.hot[e.id]||-1)>=S.t && S.t>0;
+    const p=$(e.id); p.classList.toggle('hot',h); p.setAttribute('marker-end',h?'url(#arrHot)':'url(#arr)');
+    $(e.id+'_l').classList.toggle('hot',h);
+  });
+}
+
+const STATE_TXT={normal:'En vigilancia', pre:'Comprobando que se mantiene', notificada:'Avisada · esperando que alguien la asuma', silencio:'Asumida · silenciada', seguimiento:'Seguimiento sin avisar', estabilizando:'Normalizándose · cuenta para cierre'};
+function renderStatus(){
+  const sh=shift(S.t);
+  $('sClock').textContent=clock(S.t);
+  $('sShift').textContent=`${sc.weekend?'Fin de semana':'Laborable'} · turno de ${sh.fr}${sh.guardia?' (guardia)':''}`;
+  $('sN').innerHTML=`${S.m.n}`;
+  $('sN').className='val'+(S.m.n>=cfg.amarPacientes?' warn':'');
+  $('sNsub').textContent=`pacientes · llegan ${Math.round(currentRate())}/h`;
+  $('sMax').innerHTML=`${S.m.max}<small>min</small>`;
+  $('sMax').className='val'+(S.m.max>=cfg.rojoMax?' crit':'');
+  $('sMed').textContent=`mediana ${S.m.med} min`;
+  $('sLoad').innerHTML=`${fmt1(load())}<small>pac./enf.</small>`;
+  $('sBoxes').textContent=`${S.nurses} enfermeras · ${S.boxes} box${S.boxes>1?'es':''} de triaje`;
+  const lv=S.alertLevel||S.level;
+  const el=$('sLevel'); el.className='pill lv-'+lv; el.textContent=lv.charAt(0).toUpperCase()+lv.slice(1);
+  let st=STATE_TXT[S.alert]||'';
+  if(S.alert==='normal'&&S.suppressUntil!=null) st=`Anulada · bloqueada hasta las ${clock(S.suppressUntil)}`;
+  if(S.alert==='silencio') st+=` hasta las ${clock(S.silenceEnd)}`;
+  if(S.escLevel&&S.alert!=='normal') st+=` · escalada nivel ${S.escLevel}`;
+  $('sAlert').textContent=st;
+  const r=Math.round(currentRate()); $('rngRate').value=r; $('oRate').textContent=r+(S.rateOverride!=null?' (fijo)':'');
+}
+
+function renderTabs(){
+  $('roleTabs').innerHTML=ROLE_ORDER.map(r=>{
+    const n=S.msgs[r].filter(m=>m.pending).length;
+    return `<button type="button" class="role-tab" role="tab" aria-selected="${r===viewRole}" data-role="${r}">${ROLES[r].short}${n?`<span class="badge">${n}</span>`:''}</button>`;
+  }).join('');
+}
+function renderPhone(){
+  if(S.lastMsgRole && S.msgSeq!==lastMsgSeq){
+    const latest=S.msgs[S.lastMsgRole][S.msgs[S.lastMsgRole].length-1];
+    if(latest && latest.kind!=='out') viewRole=S.lastMsgRole;
+    lastMsgSeq=S.msgSeq;
+  }
+  renderTabs();
+  $('phWho').textContent='Para: '+roleName(viewRole);
+  const list=S.msgs[viewRole];
+  const body=$('phBody');
+  if(!list.length){body.innerHTML=`<p class="ph-empty">Sin avisos para ${esc(ROLES[viewRole].short.toLowerCase())} todavía.</p>`; return}
+  const canAct=S.alert==='notificada';
+  body.innerHTML=list.map(m=>{
+    if(m.kind==='out') return `<div class="bubble out"><p class="ln">${esc(m.text)}</p><div class="tm">${clock(m.t)} ✓✓</div></div>`;
+    let acts='';
+    if(m.pending && m.kind==='alerta' && canAct){
+      if(annulOpen===m.id){
+        acts=`<div class="acts"><select id="annulSel" aria-label="Motivo de anulación">${REASONS.map((r,i)=>`<option value="${i}">${esc(r)}</option>`).join('')}</select>
+          <div class="row"><button type="button" class="no" data-act="annul-ok" data-id="${m.id}">Anular</button><button type="button" data-act="annul-x">Cancelar</button></div></div>`;
+      } else {
+        acts=`<div class="acts"><button type="button" class="go" data-act="ack" data-id="${m.id}">Asumo</button>
+          <button type="button" data-act="otro" data-id="${m.id}">Ya se está gestionando</button>
+          <button type="button" class="no" data-act="annul" data-id="${m.id}">Anular con motivo…</button></div>`;
+      }
+    } else if(m.pending && m.kind==='feedback'){
+      acts=`<div class="acts"><select id="fb_${m.id}" aria-label="Acción tomada">${FB_ACTIONS.map(a=>`<option>${esc(a)}</option>`).join('')}</select>
+        <div class="row"><button type="button" class="go" data-act="fb" data-util="1" data-id="${m.id}">Me sirvió</button><button type="button" data-act="fb" data-util="0" data-id="${m.id}">No me sirvió</button></div></div>`;
+    }
+    const st=m.status?`<div class="st${/Anulada|Respuesta/.test(m.status)?' off':''}">${esc(m.status)}</div>`:'';
+    return `<div class="bubble" data-lv="${m.lv||''}"><div class="bt">${esc(m.title)}</div>
+      ${m.kind!=='feedback'?'<div class="ctx">Urgencias adultos · espera hasta triaje</div>':''}
+      ${m.lines.map(l=>`<p class="ln">${esc(l)}</p>`).join('')}
+      ${m.note?`<p class="ln note">${esc(m.note)}</p>`:''}${acts}${st}<div class="tm">${clock(m.t)}</div></div>`;
+  }).join('');
+  body.scrollTop=body.scrollHeight;
+}
+
+function renderConfig(){
+  const n=NODES[selected], inf=INFO[selected];
+  let h=`<header><h2>Reglas del bloque</h2><small>cambia los valores y mira el efecto</small></header><div class="cfg"><h3>${esc(n.title)}</h3><p class="what">${esc(inf.what)}</p>`;
+  if(inf.params.length){
+    h+=`<div><p class="sect-t">Parámetros</p><div class="params">`+inf.params.map(k=>`<label class="param" for="p_${k}"><span>${esc(PARAM_META[k][0])}</span><span class="inp"><input type="number" id="p_${k}" data-k="${k}" min="1" max="240" value="${cfg[k]}">${esc(PARAM_META[k][1])}</span></label>`).join('')+`</div></div>`;
+  }
+  if(inf.fixed) h+=`<p class="fixed">${esc(inf.fixed)}</p>`;
+  if(inf.roster){
+    const g=shift(S.t).guardia;
+    const row=(lv,r)=>`<tr><td>${lv}</td><td class="${g?'':'now'}">${esc(ROLES[r].full(false))}</td><td class="${g?'now':''}">${esc(ROLES[r].full(true))}</td></tr>`;
+    h+=`<div><p class="sect-t">A quién avisa según turno</p><div style="overflow-x:auto"><table class="roster"><thead><tr><th>Nivel</th><th>Laborable 8–22 h</th><th>Noche y festivos</th></tr></thead><tbody>
+      ${row('Amarillo','sup')}${row('Rojo (además)','med')}${row('Escalado 1','jefe')}${row('Escalado 2','dir')}</tbody></table></div></div>`;
+  }
+  if(inf.reasons) h+=`<div><p class="sect-t">Motivos de anulación</p><ul class="reasons">${REASONS.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div>`;
+  h+=`<div><p class="sect-t">Para validar con el equipo</p><ul class="qs">${inf.q.map(q=>`<li>${esc(q)}</li>`).join('')}</ul></div>`;
+  h+=`<button type="button" class="btn ghost reset-cfg" id="bCfgReset">Volver a los valores de partida</button></div>`;
+  $('config').innerHTML=h;
+}
+
+function renderSpark(){
+  const W=600,H=170,L=34,R=10,T=10,B=24, pw=W-L-R, ph=H-T-B;
+  const hs=S.hist, ymax=Math.max(45, Math.ceil((Math.max(...hs.map(p=>p.max),cfg.rojoMax)+5)/15)*15);
+  const t0=Math.max(0,S.t-120);
+  const X=t=>L+(t-t0)/120*pw, Y=v=>T+ph-(v/ymax)*ph;
+  let g='';
+  for(let v=0;v<=ymax;v+=15){g+=`<line class="spark-grid" x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="spark-txt" x="${L-6}" y="${Y(v)+3}" text-anchor="end">${v}</text>`}
+  g+=`<line class="spark-thr" style="stroke:var(--crit)" x1="${L}" x2="${W-R}" y1="${Y(cfg.rojoMax)}" y2="${Y(cfg.rojoMax)}"/>`;
+  g+=`<line class="spark-thr" style="stroke:var(--warn)" x1="${L}" x2="${W-R}" y1="${Y(cfg.amarMediana)}" y2="${Y(cfg.amarMediana)}"/>`;
+  const pts=k=>hs.filter(p=>p.t>=t0).map(p=>`${X(p.t).toFixed(1)},${Y(p[k]).toFixed(1)}`).join(' ');
+  const pm=pts('max'); const last=hs[hs.length-1];
+  g+=`<polygon points="${X(Math.max(t0,hs[0].t))},${Y(0)} ${pm} ${X(last.t)},${Y(0)}" style="fill:var(--accent);fill-opacity:.1"/>`;
+  g+=`<polyline points="${pts('med')}" style="fill:none;stroke:var(--ink-2);stroke-width:1.5"/>`;
+  g+=`<polyline points="${pm}" style="fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linejoin:round"/>`;
+  g+=`<circle cx="${X(last.t)}" cy="${Y(last.max)}" r="4" style="fill:var(--accent);stroke:var(--surface);stroke-width:2"/>`;
+  g+=`<text class="spark-txt" x="${L}" y="${H-6}">${clock(t0)}</text><text class="spark-txt" x="${W-R}" y="${H-6}" text-anchor="end">${clock(t0+120)}</text><text class="spark-txt" x="${L+4}" y="${T+9}">min</text>`;
+  $('spark').innerHTML=g;
+}
+
+function renderEpisode(){
+  const e=S.episode||S.lastEpisode;
+  if(!e){$('episode').innerHTML=`<header><h2>Episodio de alerta</h2><small>sin alertas</small></header><p class="ep-empty">Todavía no ha saltado ninguna alerta. La sala está en vigilancia.</p>`; return}
+  const live=e===S.episode;
+  const reacts=live?S.reactivations:e.reacts, escl=live?S.escLevel:e.esc;
+  const dur=e.fired!=null?((live?S.t:e.end)-e.fired)+' min'+(live?' (en curso)':''):'—';
+  const rows=[
+    ['Detectado', clock(e.start)],
+    ['Avisado', e.fired!=null?`${clock(e.fired)} · nivel ${e.maxLevel}`:'comprobando'],
+    ['Asumida', e.firstAck!=null?`a los ${e.firstAck-e.fired} min · ${ROLES[e.ackBy].short}`:'—'],
+    ['Reactivaciones', reacts],
+    ['Escalado', escl?`nivel ${escl}`:'no'],
+    ['Avisos retenidos', e.held?`${e.held} (límite por hora)`:'0'],
+    ['Duración', dur]
+  ];
+  if(e.reason) rows.push(['Motivo de anulación', e.reason]);
+  if(e.feedback) rows.push(['Feedback', e.feedback]);
+  if(e.incident) rows.push(['Incidencia', 'sin respuesta en ningún nivel']);
+  $('episode').innerHTML=`<header><h2>Episodio ${e.n}</h2><small>${live?'en curso':esc(e.outcome)}</small></header><dl class="kv">${rows.map(r=>`<dt>${esc(r[0])}</dt><dd>${esc(r[1])}</dd>`).join('')}</dl>`;
+}
+
+function renderLog(){
+  if(S.logSeq===lastLog) return; lastLog=S.logSeq;
+  const cls=c=>'c-'+c.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'');
+  $('log').innerHTML=S.log.map(l=>`<li><span class="lt">${clock(l.t)}</span><span class="chip ${cls(l.cat)}">${esc(l.cat)}</span><span class="lx">${esc(l.text)}</span></li>`).join('');
+}
+
+function render(){
+  renderStatus(); renderFlow(); if($('selMode').value!==S.mode) $('selMode').value=S.mode;
+  if(S.ver!==lastVer){lastVer=S.ver; renderPhone()} else renderTabs();
+  renderSpark(); renderEpisode(); renderLog();
+}
+
+/* Bucle */
+function loop(){clearTimeout(timer); if(!playing) return; timer=setTimeout(()=>{tick(); render(); loop()}, Number($('selSpeed').value))}
+function setPlaying(p){playing=p; $('bPlay').textContent=p?'Pausar':'Reanudar'; loop()}
+
+function start(key){
+  reset(key); viewRole='sup'; annulOpen=null; lastVer=-1; lastLog=-1; lastMsgSeq=0;
+  $('selSc').value=key; $('selMode').value=S.mode; render();
+}
+
+/* Eventos */
+$('selSc').innerHTML=Object.entries(SCENARIOS).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');
+$('selSc').addEventListener('change',e=>{start(e.target.value); setPlaying(true)});
+$('selMode').addEventListener('change',e=>{S.mode=e.target.value; addLog('Monitorización', `Modo de respuesta: ${e.target.selectedOptions[0].textContent}.`); render()});
+$('bPlay').addEventListener('click',()=>setPlaying(!playing));
+$('bStep').addEventListener('click',()=>{setPlaying(false); tick(); render()});
+$('selSpeed').addEventListener('change',loop);
+$('bReset').addEventListener('click',()=>{start(S.key); setPlaying(true)});
+$('bBurst').addEventListener('click',()=>{burst(8); render()});
+$('rngRate').addEventListener('input',e=>{S.rateOverride=Number(e.target.value); renderStatus()});
+$('roleTabs').addEventListener('click',e=>{const b=e.target.closest('[data-role]'); if(!b) return; viewRole=b.dataset.role; annulOpen=null; renderPhone()});
+$('phBody').addEventListener('click',e=>{
+  const b=e.target.closest('[data-act]'); if(!b) return;
+  const id=Number(b.dataset.id), a=b.dataset.act;
+  if(a==='ack') ack(viewRole,'asumo');
+  else if(a==='otro') ack(viewRole,'otro');
+  else if(a==='annul'){annulOpen=id; S.ver++}
+  else if(a==='annul-x'){annulOpen=null; S.ver++}
+  else if(a==='annul-ok'){const i=Number($('annulSel').value); annulOpen=null; annul(viewRole, REASONS[i])}
+  else if(a==='fb'){feedback(viewRole, id, $('fb_'+id).value, b.dataset.util==='1')}
+  render();
+});
+$('config').addEventListener('input',e=>{
+  const k=e.target.dataset.k; if(!k) return; const v=Number(e.target.value);
+  if(Number.isFinite(v)&&v>0){cfg[k]=v; compute(); renderStatus(); renderFlow(); renderSpark()}
+});
+$('config').addEventListener('click',e=>{if(e.target.id==='bCfgReset'){cfg=Object.assign({},CFG_DEFAULT); renderConfig(); compute(); render()}});
+
+buildFlow();
+start('rapido');
+renderConfig();
+setPlaying(true);
+</script>
+
+</body>
+</html>
