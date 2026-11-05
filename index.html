@@ -125,7 +125,10 @@ output{font:500 13px var(--font-mono);color:var(--ink);min-width:6ch}
 .col-label{font:500 10.5px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
 .role-tab{font:600 11.5px var(--font-body);padding:7px 2px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;position:relative}
-.role-tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.role-tab[aria-selected="true"]{background:var(--rc,var(--ink));color:#FFFFFF;border-color:var(--rc,var(--ink))}
+.role-tab{border-top:3px solid var(--rc,var(--line))!important}
+.act-l{margin-top:4px!important;font-weight:600;color:var(--ink)}
+.phone{transition:border-color .3s}
 .badge{position:absolute;top:-7px;right:-4px;background:var(--crit);color:var(--on-crit);font:700 10px/16px var(--font-mono);min-width:16px;height:16px;border-radius:8px;padding:0 4px}
 .phone{border:8px solid var(--frame);border-radius:30px;background:var(--phone-bg);height:560px;display:flex;flex-direction:column;overflow:hidden}
 .ph-head{background:var(--surface);padding:12px 12px 10px;display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line)}
@@ -221,9 +224,9 @@ output{font:500 13px var(--font-mono);color:var(--ink);min-width:6ch}
     <div>
       <div class="eyebrow">Command Center · HQS del Vallès</div>
       <h1>Flujo de alerta: retraso en triaje por alta demanda</h1>
-      <p class="lede">Urgencias adultos. Salta si la mediana de espera hasta triaje pasa de 6 min o un paciente pasa de 15. Con 3 pacientes o menos es informativa; si dura 15 min, pasa a alerta. La alerta va a la dinamizadora; sin acuse en 5 min, a la responsable de enfermería; sostenida 20 min, a Dirección de Enfermería.</p>
+      <p class="lede">Urgencias adultos. Vigila la mediana de espera hasta triaje: si pasa de 6 min, aviso informativo. Es alerta con más de 6 pacientes o un paciente por encima de 15 min: la responsable de enfermería activa el 2.º box de triaje y la dinamizadora acude a la sala. Tras 20 min de silencio, si persiste la demora, escala a Dirección de Enfermería.</p>
     </div>
-    <span class="demo-tag">Reglas v1.1 · fase 1 · dueño: equipo de desarrollo · datos simulados</span>
+    <span class="demo-tag">Reglas v1.2 · dueño: equipo de desarrollo · datos simulados</span>
   </header>
 
   <section class="status" aria-label="Estado de la sala de espera">
@@ -305,29 +308,31 @@ output{font:500 13px var(--font-mono);color:var(--ink);min-width:6ch}
 </div>
 
 <script id="sim">
-/* ===== Núcleo de simulación (sin DOM) · v1.1 fase 1 ===== */
-const RULES_VERSION = 'v1.1 · fase 1';
+/* ===== Núcleo de simulación (sin DOM) · v1.2 ===== */
+const RULES_VERSION = 'v1.2';
 const RULES_OWNER = 'Equipo de desarrollo';
 const CFG_DEFAULT = {
-  umbralMediana:6, esperaMax:15, umbralPacientes:3, persist:2,
+  umbralMediana:6, esperaMax:15, umbralPacientes:6, persist:2,
   umbralCierre:5, cierreEstable:5, infoMax:15,
-  ackMax:5, silencio:10, escSostenida:20, bloqueoAnul:60, maxAvisosHora:4, minTriaje:4
+  ackRecordatorio:5, ackEscala:10, silencio:20, seguimientoExtra:10,
+  bloqueoAnul:60, maxAvisosHora:4, minTriaje:4
 };
 let cfg = Object.assign({}, CFG_DEFAULT);
 
 const SCENARIOS = {
-  rapido:     {name:'Se resuelve rápido', start:10*60, mode:'auto', initial:3, gap:1.6, rate:t=>t<22?44:18, maxExtra1:1},
-  olvidado:   {name:'Un paciente olvidado (>15 min)', start:8*60+30, mode:'auto', initial:2, gap:1, rate:()=>30, stuck:-13, maxExtra1:0},
-  informativa:{name:'Informativa que se alarga', start:9*60, mode:'auto', initial:2, gap:3, rate:t=>t<30?9:4, boxes:1, triaje:6, maxExtra1:1},
-  sostenida:  {name:'Sostenida: escala a Dirección', start:16*60, mode:'auto', initial:4, gap:1.5, rate:()=>50, maxExtra1:1},
-  nadie:      {name:'Nadie responde', start:11*60, mode:'nadie', initial:4, gap:1.5, rate:()=>40, maxExtra1:1},
-  anula:      {name:'Anulación con motivo', start:12*60, mode:'anular', initial:4, gap:1.5, rate:t=>t<35?44:16, maxExtra1:1}
+  rapido:     {name:'Se resuelve con el 2.º box', start:10*60, mode:'auto', initial:5, gap:1.4, rate:t=>t<14?30:12, boxes:1},
+  mejora:     {name:'Mejora, pero necesita 10 min más', start:13*60, mode:'auto', initial:5, gap:1.4, rate:t=>t<20?30:14, boxes:1},
+  olvidado:   {name:'Un paciente olvidado (>15 min)', start:8*60+30, mode:'auto', initial:2, gap:1, rate:()=>24, stuck:-13, boxes:2},
+  informativa:{name:'Informativa que se alarga', start:9*60, mode:'auto', initial:3, gap:2.5, rate:t=>t<30?15:4, boxes:1, triaje:4},
+  sostenida:  {name:'Persiste: escala a Dirección', start:16*60, mode:'auto', initial:6, gap:1.3, rate:t=>t<45?44:18, boxes:1},
+  nadie:      {name:'Nadie responde', start:11*60, mode:'nadie', initial:6, gap:1.3, rate:()=>36, boxes:1},
+  anula:      {name:'Anulación con motivo', start:12*60, mode:'anular', initial:6, gap:1.3, rate:t=>t<20?34:10, boxes:1}
 };
 
 const ROLES = {
-  din: {short:'Dinamizadora', full:()=> 'Dinamizadora de la sala de espera'},
-  resp:{short:'Resp. enfermería', full:()=> 'Responsable de enfermería de Urgencias'},
-  dir: {short:'Dir. enfermería', full:()=> 'Dirección de Enfermería'}
+  din: {short:'Dinamizadora', full:()=> 'Dinamizadora de la sala de espera', color:'#0F7C80'},
+  resp:{short:'Resp. enfermería', full:()=> 'Responsable de enfermería de Urgencias', color:'#6B4FC8'},
+  dir: {short:'Dir. enfermería', full:()=> 'Dirección de Enfermería', color:'#3A4356'}
 };
 const ROLE_ORDER = ['din','resp','dir'];
 const REASONS = [
@@ -336,7 +341,7 @@ const REASONS = [
   'Ya se ha comunicado por otra vía',
   'Otro motivo (texto libre)'
 ];
-const FB_ACTIONS = ['Dinamizadora en sala y priorizar triaje','Abrir otro puesto de triaje','Pedir refuerzo de enfermería','Ninguna: se resolvió sola'];
+const FB_ACTIONS = ['Activar 2.º box de triaje','Reasignar enfermera a triaje','Pedir refuerzo de enfermería','Ninguna: se resolvió sola'];
 const LV_NAME = {verde:'Normal', informativa:'Informativa', alerta:'Alerta', escalada:'Escalada'};
 
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -349,13 +354,14 @@ function roleName(r){return ROLES[r].full()}
 function fmt1(x){return x.toFixed(1).replace('.',',')}
 function load(){return ((sc.enBoxes||18)+S.m.n)/S.nurses}
 function shownLevel(){if(S.alertLevel==='alerta'&&S.escLevel>0) return 'escalada'; return S.alertLevel||S.level}
+function boxAction(){return S.boxes<2?'Activar 2.º box de triaje':'El 2.º box ya está abierto: reasignar enfermera a triaje o pedir refuerzo'}
 
 function reset(key){
   sc = SCENARIOS[key]; rng = mulberry32(11);
-  S = {key, t:0, waiting:[], stuck:[], arrAcc:0, capAcc:0, boxes:sc.boxes||2, nurses:sc.nurses||6, extraFirst:0,
+  S = {key, t:0, waiting:[], stuck:[], arrAcc:0, capAcc:0, boxes:sc.boxes||2, nurses:sc.nurses||6, reassigned:false,
     alert:'normal', persist:0, level:'verde', below:true, m:{n:0,max:0,med:0}, reasonAlert:'',
-    alertLevel:null, notified:new Set(), notifiedAt:null, respIn:false, escAckDeadline:null, round:0, roundType:'base',
-    escLevel:0, reactivations:0, ackedBy:null, silenceEnd:null, stable:0, suppressUntil:null,
+    alertLevel:null, notified:new Set(), notifiedAt:null, reminded:false, escAckDeadline:null, round:0, roundType:'base',
+    escLevel:0, reactivations:0, ackedBy:null, ackSnap:null, extraGiven:false, followEnd:null, silenceEnd:null, stable:0, suppressUntil:null,
     queue:[], msgs:{din:[],resp:[],dir:[]}, sent:[], log:[], hist:[],
     flash:null, hot:{}, visited:new Set(['monitor']), episode:null, lastEpisode:null, episodes:0,
     mode:sc.mode, rateOverride:null, msgSeq:0, ver:1, lastMsgRole:null, logSeq:0, trail:[],
@@ -363,7 +369,7 @@ function reset(key){
   for(let i=0;i<sc.initial;i++) S.waiting.push(-(sc.initial-i)*sc.gap);
   if(sc.stuck!=null) S.stuck.push(sc.stuck);
   compute(); S.hist.push({t:0, max:S.m.max, med:S.m.med});
-  addLog('Monitorización', `Escenario «${sc.name}»${S.shadow?' en modo sombra: se calcula todo, pero no se avisa a nadie':''}. El Command Center recalcula la espera cada minuto.`);
+  addLog('Monitorización', `Escenario «${sc.name}»${S.shadow?' en modo sombra: se calcula todo, pero no se avisa a nadie':''}. ${S.boxes} box${S.boxes>1?'es':''} de triaje abierto${S.boxes>1?'s':''}.`);
 }
 
 function compute(){
@@ -382,9 +388,9 @@ function addLog(cat,text,lv){S.log.unshift({id:++S.logSeq,t:S.t,cat,text,lv}); i
 function hot(id){S.hot[id]=S.t+3}
 function flash(node){S.flash={node,t:S.t}}
 
-function buildMsg(title,note,actionable){
-  return {kind:actionable?'alerta':'info', lv:shownLevel(), title, note, pending:!!actionable,
-    lines:[`${S.m.n} pacientes esperando triaje`, `Mediana de espera ${S.m.med} min · la más larga ${S.m.max} min`, `${S.boxes} puesto${S.boxes>1?'s':''} de triaje · ${fmt1(load())} pacientes por enfermera`]};
+function buildMsg(title,note,actionable,action){
+  const lines=[`${S.m.n} pacientes esperando triaje`, `Mediana de espera ${S.m.med} min · la más larga ${S.m.max} min`, `${S.boxes} box${S.boxes>1?'es':''} de triaje abierto${S.boxes>1?'s':''}`];
+  return {kind:actionable?'alerta':'info', lv:shownLevel(), title, note, action, pending:!!actionable, lines};
 }
 function sendMsg(role,msg,force){
   const recent=S.sent.filter(s=>s.role===role && s.t>S.t-60).length;
@@ -400,14 +406,6 @@ function outMsg(role,text){S.msgs[role].push({id:++S.msgSeq,t:S.t,kind:'out',tex
 function markPending(status){ROLE_ORDER.forEach(r=>S.msgs[r].forEach(m=>{if(m.kind==='alerta'&&m.pending){m.pending=false;m.status=status}})); S.ver++}
 function hasPending(role){return S.msgs[role].some(m=>m.kind==='alerta'&&m.pending)}
 
-function newRound(type,roles,title,note,force,primary){
-  S.round++; S.roundType=type; S.notifiedAt=S.t;
-  const sentTo=[];
-  roles.forEach(r=>{if(sendMsg(r,buildMsg(title,note,true),force)) sentTo.push(r)});
-  if(sentTo.length) addLog('Notificación', `«${title}» enviada por WhatsApp a ${sentTo.map(roleName).join(' y ')}.`, 'alerta');
-  hot('e_na'); flash(type==='esc'?'escalado':'notificacion');
-  scheduleAuto(primary||roles[0]);
-}
 function scheduleAuto(role){
   const round=S.round, delay=role==='dir'?3:2;
   if(S.mode==='auto') S.queue.push({t:S.t+delay, fn:()=>{if(S.alert==='notificada'&&S.round===round&&hasPending(role)) ack(role,'asumo')}});
@@ -415,7 +413,7 @@ function scheduleAuto(role){
 }
 
 function startEpisode(){
-  S.episode={n:++S.episodes,start:S.t,infoAt:null,fired:null,firstAck:null,ackBy:null,reacts:0,esc:0,held:0,maxLevel:S.level,outcome:null,end:null,feedback:null,reason:null,incident:false,respAt:null,shadow:S.shadow};
+  S.episode={n:++S.episodes,start:S.t,infoAt:null,fired:null,firstAck:null,ackBy:null,reacts:0,esc:0,held:0,maxLevel:S.level,outcome:null,end:null,feedback:null,reason:null,incident:false,remindAt:null,extra:false,shadow:S.shadow};
   S.visited=new Set(['monitor','disparo']);
 }
 function endEpisode(outcome){
@@ -441,24 +439,30 @@ function closeInfo(){
   S.alert='normal'; S.persist=0; S.alertLevel=null;
 }
 
-/* --- Alerta: la dinamizadora es la dueña --- */
+/* --- Alerta: la responsable de enfermería es la dueña; la dinamizadora va en copia --- */
 function fire(fromInfo,why){
-  S.alert='notificada'; S.alertLevel='alerta'; S.escLevel=0; S.reactivations=0; S.notified=new Set(); S.ackedBy=null; S.respIn=false;
+  S.alert='notificada'; S.alertLevel='alerta'; S.escLevel=0; S.reactivations=0; S.notified=new Set(); S.ackedBy=null; S.extraGiven=false; S.ackSnap=null;
   S.episode.fired=S.t; S.episode.maxLevel='alerta';
   hot('e_dn');
   const motivo = why || S.reasonAlert;
   addLog('Disparo', fromInfo
     ?`Pasa de informativa a alerta: ${motivo}.`
     :`Alerta confirmada: ${motivo}, mediana ${S.m.med} min. Se ha mantenido ${cfg.persist} min.`, 'alerta');
-  newRound('base', ['din'], 'ALERTA · RETRASO EN TRIAJE', 'Eres la responsable de esta alerta: acude a la sala.', true, 'din');
+  S.round++; S.roundType='base'; S.notifiedAt=S.t; S.reminded=false;
+  sendMsg('din',buildMsg('ALERTA · EN COPIA','Acude a la sala de espera. La responsable de enfermería gestiona la alerta.',false),true);
+  sendMsg('resp',buildMsg('ALERTA · RETRASO EN TRIAJE','Eres la responsable de esta alerta.',true,boxAction()),true);
+  addLog('Notificación', `Alerta por WhatsApp a la ${roleName('resp')} (acción: ${boxAction().toLowerCase()}) y, en copia, a la ${roleName('din')}, que acude a la sala.`, 'alerta');
+  hot('e_na'); flash('notificacion');
+  scheduleAuto('resp');
+  S.queue.push({t:S.t+3, fn:()=>dinamizadoraEnSala()});
 }
-function escalateResp(){
-  S.respIn=true; if(S.episode) S.episode.respAt=S.t;
-  hot('e_ae');
-  const sent=sendMsg('resp',buildMsg('ALERTA SIN ASUMIR',`La dinamizadora no la ha asumido en ${cfg.ackMax} min.`,true),true);
-  addLog('Escalado', `Nadie la ha asumido en ${cfg.ackMax} min: se avisa a la Responsable de enfermería de Urgencias. La dinamizadora puede seguir asumiéndola.`, 'alerta');
-  flash('escalado');
-  if(sent) scheduleAuto('resp');
+function dinamizadoraEnSala(){
+  if(S.stuck.length){S.stuck=[]; addLog('Acción','La dinamizadora está en la sala y localiza al paciente que llevaba más tiempo esperando: pasa a triaje.'); compute()}
+}
+function remind(){
+  S.reminded=true; if(S.episode) S.episode.remindAt=S.t;
+  const sent=sendMsg('resp',buildMsg('RECORDATORIO · SIN ASUMIR',`Nadie la ha asumido en ${cfg.ackRecordatorio} min. A los ${cfg.ackEscala} min escalará a Dirección de Enfermería.`,true,boxAction()),false);
+  addLog('Notificación', `Nadie la ha asumido en ${cfg.ackRecordatorio} min: recordatorio a la ${roleName('resp')}${sent?'':' (retenido por el límite)'}.`, 'alerta');
 }
 
 function ack(role,how){
@@ -466,19 +470,22 @@ function ack(role,how){
   const wait=S.t-S.notifiedAt;
   S.ackedBy=role;
   if(S.episode&&S.episode.firstAck==null){S.episode.firstAck=S.t; S.episode.ackBy=role}
-  outMsg(role, how==='otro'?'Ya se está gestionando':(role==='din'?'Asumo, voy a la sala':'Asumo'));
+  const txt = how==='otro'?'Ya se está gestionando':(role==='dir'?'Asumo · envío refuerzo':(S.boxes<2?'Asumo · activo el 2.º box':'Asumo · reasigno enfermera a triaje'));
+  outMsg(role, txt);
   markPending(`${how==='otro'?'Gestionada':'Asumida'} por ${ROLES[role].short} · ${clock(S.t)}`);
-  S.alert='silencio'; S.silenceEnd=S.t+cfg.silencio; S.stable=0;
+  S.alert='silencio'; S.silenceEnd=S.t+cfg.silencio; S.stable=0; S.ackSnap={med:S.m.med,n:S.m.n,max:S.m.max};
   hot('e_as'); flash('acuse');
-  addLog('Acuse', `${roleName(role)} ${how==='otro'?'indica que ya se está gestionando':'asume la alerta'} a los ${wait} min. Silencio hasta las ${clock(S.silenceEnd)}.`);
-  S.queue.push({t:S.t+2, fn:()=>mitigate(role)});
+  addLog('Acuse', `${roleName(role)} ${how==='otro'?'indica que ya se está gestionando':'asume la alerta'} a los ${wait} min. Silencio de ${cfg.silencio} min, hasta las ${clock(S.silenceEnd)}.`);
+  S.queue.push({t:S.t+1, fn:()=>mitigate(role)});
 }
 function mitigate(role){
-  if(S.stuck.length){S.stuck=[]; addLog('Acción','La dinamizadora localiza al paciente que llevaba más tiempo esperando y pasa a triaje.'); compute(); return}
-  if(role==='dir'&&S.dirRef){addLog('Acción','El refuerzo de Dirección de Enfermería ya está en marcha.')}
-  else if(role==='dir'){S.dirRef=true; S.boxes+=2; addLog('Acción', `Dirección de Enfermería envía refuerzo: 2 puestos de triaje más (${S.boxes} en total).`)}
-  else if(S.extraFirst<(sc.maxExtra1??1)){S.extraFirst++; S.boxes++; addLog('Acción', `${role==='din'?'La dinamizadora está en la sala y ayuda a priorizar':'Se abre otro puesto de triaje'}: ${S.boxes} puestos en total.`)}
-  else addLog('Acción', 'La primera línea no tiene más capacidad para abrir otro puesto de triaje.');
+  if(role==='dir'){
+    if(S.dirRef){addLog('Acción','El refuerzo de Dirección de Enfermería ya está en marcha.'); return}
+    S.dirRef=true; S.boxes+=2; addLog('Acción', `Dirección de Enfermería envía refuerzo: dos puestos de triaje más (${S.boxes} en total).`); return;
+  }
+  if(S.boxes<2){S.boxes=2; addLog('Acción','La responsable de enfermería activa el 2.º box de triaje.')}
+  else if(!S.reassigned){S.reassigned=true; S.boxes+=1; addLog('Acción', `El 2.º box ya estaba abierto: se reasigna una enfermera a triaje (${S.boxes} puestos).`)}
+  else addLog('Acción','No queda más capacidad en la unidad para triaje.');
 }
 
 function reevaluate(){
@@ -488,36 +495,45 @@ function reevaluate(){
     S.alert='estabilizando';
     addLog('Reevaluación', S.below
       ?`La mediana ya está en ${S.m.med} min. Faltan ${cfg.cierreEstable-S.stable} min estables para cerrar.`
-      :`La mediana está en ${S.m.med} min: por debajo del umbral, pero aún no en ${cfg.umbralCierre} min o menos. No se cierra todavía.`);
+      :`La demora ya no supera el umbral (mediana ${S.m.med} min), pero aún no está en ${cfg.umbralCierre} min o menos. Se vigila sin cerrar.`);
     return;
   }
   persists();
 }
 function persists(){
-  const since=S.t-S.episode.fired;
-  if(S.escLevel===0 && since>=cfg.escSostenida) escalate(`sigue sin resolverse a los ${since} min del aviso`, false);
-  else reactivate(`la mediana sigue en ${S.m.med} min con ${S.m.n} pacientes`);
+  const sn=S.ackSnap||{med:99,n:99};
+  const improved = S.m.med<sn.med || S.m.n<sn.n;
+  if(S.escLevel===0){
+    if(improved && !S.extraGiven){
+      S.extraGiven=true; if(S.episode) S.episode.extra=true;
+      S.alert='seguimiento'; S.followEnd=S.t+cfg.seguimientoExtra; S.stable=0;
+      addLog('Reevaluación', `Persiste la demora, pero mejora (mediana ${sn.med}→${S.m.med} min, ${sn.n}→${S.m.n} pacientes). Se dan ${cfg.seguimientoExtra} min más de seguimiento sin avisar.`, 'alerta');
+      return;
+    }
+    escalate(improved?`persiste la demora tras ${cfg.silencio+cfg.seguimientoExtra} min (mediana ${S.m.med} min)`:`persiste la demora tras ${cfg.silencio} min de silencio sin mejorar (mediana ${sn.med}→${S.m.med} min)`, false);
+  } else reactivate(`persiste la demora (mediana ${S.m.med} min, ${S.m.n} pacientes)`);
 }
 function reactivate(reason){
   S.reactivations++; hot('e_rn'); flash('reevaluacion');
-  addLog('Reevaluación', `Persiste tras el silencio. Reactivada (${S.reactivations}ª vez): ${reason}.`, 'alerta');
-  S.alert='notificada';
-  const roles=['din'].concat(S.respIn?['resp']:[]).concat(S.escLevel?['dir']:[]);
-  newRound('base', roles, `REACTIVADA (${S.reactivations}ª)`, `Motivo: ${reason}`, false, S.ackedBy||'din');
-  if(S.escLevel) S.escAckDeadline=S.t+cfg.ackMax;
+  addLog('Reevaluación', `Reactivada (${S.reactivations}ª vez): ${reason}.`, 'escalada');
+  S.alert='notificada'; S.round++; S.notifiedAt=S.t; S.reminded=true;
+  ['dir','resp'].forEach(r=>sendMsg(r,buildMsg(`REACTIVADA (${S.reactivations}ª)`,`Motivo: ${reason}`,true,r==='dir'?'Valorar más refuerzo':boxAction()),false));
+  S.escAckDeadline=S.t+cfg.ackRecordatorio;
+  scheduleAuto('dir');
 }
 function escalate(reason,fromWaiting){
-  S.escLevel=1; S.alert='notificada';
+  S.escLevel=1; S.alert='notificada'; S.round++; S.notifiedAt=S.t; S.reminded=true;
   if(S.episode) S.episode.esc=1;
-  hot(fromWaiting?'e_ae':'e_re'); hot('e_ea');
+  hot(fromWaiting?'e_ae':'e_re'); hot('e_ea'); flash('escalado');
   addLog('Escalado', `Escala a Dirección de Enfermería: ${reason}.`, 'escalada');
-  newRound('esc', ['dir'], 'ESCALADA · DIRECCIÓN DE ENFERMERÍA', `Motivo: ${reason}`, true, 'dir');
-  S.escAckDeadline=S.t+cfg.ackMax;
+  sendMsg('dir',buildMsg('ESCALADA · DIRECCIÓN DE ENFERMERÍA',`Motivo: ${reason}.`,true,'Valorar y enviar refuerzo'),true);
+  S.escAckDeadline=S.t+cfg.ackRecordatorio;
+  scheduleAuto('dir');
 }
 function incident(){
   const first=S.episode&&!S.episode.incident; if(S.episode) S.episode.incident=true;
   addLog('Escalado', first?'Dirección de Enfermería no ha respondido. Queda registrada como incidencia y el aviso se repite cada 30 min.':'Sigue sin asumirse. Se repite el aviso a Dirección de Enfermería.', 'escalada');
-  if(sendMsg('dir',buildMsg('RECORDATORIO · SIN ASUMIR','Nadie ha asumido todavía esta alerta.',true),false)) S.round++;
+  if(sendMsg('dir',buildMsg('RECORDATORIO · SIN ASUMIR','Nadie ha asumido todavía esta alerta.',true,'Valorar y enviar refuerzo'),false)) S.round++;
   S.escAckDeadline=S.t+30;
 }
 function close(){
@@ -530,7 +546,7 @@ function close(){
     if(S.mode==='auto') S.queue.push({t:S.t+1, fn:()=>{const m=[...S.msgs[r]].reverse().find(x=>x.kind==='feedback'&&x.pending); if(m) feedback(r,m.id,r==='dir'?FB_ACTIONS[2]:FB_ACTIONS[0],true)}});
   }
   endEpisode('Cerrada');
-  S.alert='normal'; S.persist=0; S.alertLevel=null; S.escLevel=0; S.respIn=false;
+  S.alert='normal'; S.persist=0; S.alertLevel=null; S.escLevel=0;
 }
 function feedback(role,id,accion,util){
   const m=S.msgs[role].find(x=>x.id===id); if(!m||!m.pending) return;
@@ -547,7 +563,7 @@ function annul(role,reason){
   addLog('Anulación', `${roleName(role)} anula la alerta. Motivo: «${reason}». No volverá a saltar durante ${cfg.bloqueoAnul} min.`);
   S.ackedBy=role; if(S.episode){S.episode.reason=reason; if(S.episode.firstAck==null){S.episode.firstAck=S.t;S.episode.ackBy=role}}
   endEpisode('Anulada');
-  S.alert='normal'; S.suppressUntil=S.t+cfg.bloqueoAnul; S.persist=0; S.alertLevel=null; S.escLevel=0; S.respIn=false;
+  S.alert='normal'; S.suppressUntil=S.t+cfg.bloqueoAnul; S.persist=0; S.alertLevel=null; S.escLevel=0;
   if(S.mode==='anular'){S.mode='auto'; addLog('Monitorización','En la demo, a partir de aquí la respuesta pasa a automática.')}
 }
 
@@ -563,7 +579,7 @@ function shadowStep(){
       S.persist++;
       if(S.persist>=cfg.persist){
         S.alert='sombra'; S.stable=0; S.alertLevel=L; S.escLevel=0;
-        if(L==='alerta'){S.episode.fired=S.t; st.alerta++; addLog('Sombra', `Habría saltado una ALERTA a la dinamizadora (${S.reasonAlert}).`, 'alerta')}
+        if(L==='alerta'){S.episode.fired=S.t; st.alerta++; addLog('Sombra', `Habría saltado una ALERTA a la responsable de enfermería (${S.reasonAlert}).`, 'alerta')}
         else {S.episode.infoAt=S.t; st.info++; addLog('Sombra', `Habría enviado un aviso INFORMATIVO (mediana ${S.m.med} min, ${S.m.n} pacientes).`, 'informativa')}
         flash('disparo');
       }
@@ -573,10 +589,9 @@ function shadowStep(){
         S.alertLevel='alerta'; S.episode.fired=S.t; st.alerta++;
         addLog('Sombra', L==='alerta'?`La informativa habría pasado a alerta (${S.reasonAlert}).`:`La informativa habría pasado a alerta por durar ${cfg.infoMax} min.`, 'alerta');
       }
-      if(S.alertLevel==='alerta' && !S.episode.respAt && S.t-S.episode.fired>=cfg.ackMax){S.episode.respAt=S.t}
-      if(S.alertLevel==='alerta' && !S.escLevel && S.t-S.episode.fired>=cfg.escSostenida){
+      if(S.alertLevel==='alerta' && !S.escLevel && L!=='verde' && S.t-S.episode.fired>=cfg.silencio+2){
         S.escLevel=1; S.episode.esc=1; st.esc++;
-        addLog('Sombra', `Habría escalado a Dirección de Enfermería (lleva ${cfg.escSostenida} min sin resolverse).`, 'escalada');
+        addLog('Sombra', `Sin ninguna medida, habría escalado a Dirección de Enfermería (persiste tras ${cfg.silencio} min).`, 'escalada');
       }
       if(S.below){S.stable++; if(S.stable>=cfg.cierreEstable){
         const d=S.t-(S.episode.infoAt??S.episode.fired);
@@ -613,13 +628,18 @@ function alertStep(){
       break;
     case 'notificada':
       if(S.escLevel===0){
-        if(!S.respIn && S.t-S.notifiedAt>=cfg.ackMax) escalateResp();
-        if(S.t-S.episode.fired>=cfg.escSostenida) escalate(`nadie la ha resuelto en ${cfg.escSostenida} min`, true);
+        if(!S.reminded && S.t-S.notifiedAt>=cfg.ackRecordatorio) remind();
+        if(S.t-S.notifiedAt>=cfg.ackEscala) escalate(`nadie la ha asumido en ${cfg.ackEscala} min`, true);
       } else if(S.t>=S.escAckDeadline) incident();
       break;
     case 'silencio':
       S.stable = S.below?S.stable+1:0;
       if(S.stable>=cfg.cierreEstable || S.t>=S.silenceEnd) reevaluate();
+      break;
+    case 'seguimiento':
+      S.stable = S.below?S.stable+1:0;
+      if(S.stable>=cfg.cierreEstable){close(); break}
+      if(S.t>=S.followEnd) reevaluate();
       break;
     case 'estabilizando':
       if(S.below){S.stable++; if(S.stable>=cfg.cierreEstable) close()}
@@ -636,8 +656,9 @@ function activeNode(){
     case 'pre': return 'disparo';
     case 'sombra': return 'disparo';
     case 'informada': return 'notificacion';
-    case 'notificada': return S.escLevel||S.respIn?'escalado':'acuse';
+    case 'notificada': return S.escLevel?'escalado':'acuse';
     case 'silencio': return 'silencio';
+    case 'seguimiento': return 'reevaluacion';
     case 'estabilizando': return 'cierre';
   }
   return 'monitor';
@@ -680,44 +701,45 @@ const EDGES = [
   {id:'e_as', d:'M728 63 H776', l:'Asumo', x:752, y:54},
   {id:'e_sr', d:'M849 96 V286', l:'fin silencio', x:857, y:180, a:'start'},
   {id:'e_rn', d:'M810 290 C 810 200, 500 210, 500 100', l:'reactivar', x:655, y:198},
-  {id:'e_ae', d:'M615 96 V286', l:'20 min', x:607, y:140, a:'end'},
+  {id:'e_ae', d:'M615 96 V286', l:'10 min sin acuse', x:607, y:140, a:'end'},
   {id:'e_ea', d:'M690 290 V100', l:'nuevo aviso', x:698, y:258, a:'start'},
-  {id:'e_re', d:'M780 323 H712', l:'sostenida', x:745, y:314},
+  {id:'e_re', d:'M780 323 H712', l:'persiste', x:745, y:314},
   {id:'e_rc', d:'M849 356 V392 H89 V360', l:'estable · se cierra', x:470, y:410},
   {id:'e_cm', d:'M60 290 V100', l:'feedback', x:68, y:200, a:'start'},
   {id:'e_nx', d:'M430 96 C 430 200, 300 190, 300 286', l:'anular', x:378, y:182},
   {id:'e_xm', d:'M240 290 C 240 200, 130 200, 130 100', l:'tras bloqueo', x:190, y:225}
 ];
 const PARAM_META = {
-  umbralMediana:['Salta si la mediana de espera pasa de','min'], esperaMax:['Alerta si un paciente pasa de','min'],
-  umbralPacientes:['Informativa hasta (pacientes esperando)','pac.'], persist:['Tiempo que debe mantenerse antes de avisar','min'],
+  umbralMediana:['Vigila: salta si la mediana de espera pasa de','min'], esperaMax:['Alerta si un paciente pasa de','min'],
+  umbralPacientes:['Alerta con más de (pacientes esperando)','pac.'], persist:['Tiempo que debe mantenerse antes de avisar','min'],
   infoMax:['La informativa pasa a alerta si dura','min'], maxAvisosHora:['Máximo de avisos por persona y hora','avisos'],
-  ackMax:['Avisa a la responsable si nadie la asume en','min'], silencio:['Duración del silencio tras asumirla','min'],
-  escSostenida:['Escala a Dirección de Enfermería si sigue a los','min'], umbralCierre:['Se cierra con la mediana en o por debajo de','min'],
+  ackRecordatorio:['Recordatorio si nadie la asume en','min'], ackEscala:['Escala a Dirección si nadie la asume en','min'],
+  silencio:['Silencio tras asumirla','min'], seguimientoExtra:['Seguimiento extra si persiste pero mejora','min'],
+  umbralCierre:['Se cierra con la mediana en o por debajo de','min'],
   cierreEstable:['Minutos estables para cerrar','min'], bloqueoAnul:['Bloqueo tras anularla','min'], minTriaje:['Simulación: duración de un triaje','min']
 };
 const INFO = {
-  monitor:{what:'El Command Center lee del sistema de Urgencias la hora de admisión y la de triaje de cada paciente, y recalcula cada minuto la mediana de espera y la espera más larga.',
+  monitor:{what:'El Command Center lee del sistema de Urgencias la hora de admisión y la de triaje de cada paciente, y recalcula cada minuto la mediana de espera y la espera más larga. La mediana es el indicador de vigilancia.',
     params:['minTriaje'], fixed:'Modo sombra: antes de la puesta en marcha, la alerta se calcula 2 a 4 semanas sin avisar a nadie para calibrar los umbrales.',
-    q:['¿El dato llega del HIS en tiempo real o con retraso?','Si la integración se cae, ¿lanzamos una alerta técnica aparte?','¿Medimos desde la admisión o desde la llegada a puerta?']},
-  disparo:{what:'Salta cuando la mediana de espera pasa de 6 min o un paciente pasa de 15, y se mantiene 2 min. Es alerta si hay más de 3 pacientes o alguien pasa de 15 min; si no, informativa.',
+    q:['¿El dato llega del HIS en tiempo real o con retraso?','Si la integración se cae, ¿lanzamos una alerta técnica aparte?']},
+  disparo:{what:'Salta cuando la mediana de espera pasa de 6 min o un paciente pasa de 15, y se mantiene 2 min. Es alerta con más de 6 pacientes o alguien por encima de 15 min; si no, informativa.',
     params:['umbralMediana','esperaMax','umbralPacientes','persist'],
-    q:['¿15 min es el límite adecuado para un solo paciente?','¿Los umbrales cambian de noche?']},
-  notificacion:{what:'La informativa va a la dinamizadora y a la responsable de enfermería, sin pedir respuesta, y pasa a alerta si dura 15 min. La alerta va solo a la dinamizadora, que es su responsable y acude a la sala.',
+    q:['¿El umbral de 6 pacientes vale igual con 1 que con 2 boxes abiertos?','¿Los umbrales cambian de noche?']},
+  notificacion:{what:'La informativa va a la dinamizadora y a la responsable de enfermería, sin pedir respuesta, y pasa a alerta si dura 15 min. La alerta va a la responsable de enfermería, que es su dueña, con la acción «Activar 2.º box de triaje». La dinamizadora va en copia y acude a la sala.',
     params:['infoMax','maxAvisosHora'], roster:true,
     q:['¿Canal oficial: WhatsApp corporativo o grupo de la unidad?','¿Qué datos pueden ir en el mensaje sin incluir datos del paciente?']},
-  acuse:{what:'La dinamizadora pulsa «Asumo». Si no lo hace en 5 min, la alerta se envía también a la responsable de enfermería. Cualquiera de las dos puede asumirla.',
-    params:['ackMax'], q:['¿Basta con leerlo o exigimos pulsar?','Si la asume la responsable, ¿la dinamizadora debe acudir igualmente?']},
-  silencio:{what:'Tras asumirla, la alerta deja de avisar 10 min para que la medida haga efecto. Si se cumple la condición de cierre 5 min seguidos, se cierra sin esperar.',
-    params:['silencio'], q:['¿10 min es suficiente para notar el efecto?']},
-  reevaluacion:{what:'Al acabar el silencio se revisa. Si la mediana bajó a 5 min o menos, cuenta para el cierre. Si está entre 5 y 6, se vigila sin cerrar. Si persiste, se reactiva o, pasados 20 min desde el aviso, escala.',
-    params:['escSostenida'], q:['¿Contamos los 20 min desde el aviso o desde el acuse?']},
-  escalado:{what:'Dos escalones. Sin acuse en 5 min: se suma la responsable de enfermería. Sostenida 20 min desde el aviso, la haya asumido alguien o no: Dirección de Enfermería. Si Dirección no responde, queda como incidencia.',
-    params:['ackMax','escSostenida'], q:['¿Se informa a la dinamizadora y a la responsable de que ha escalado?']},
-  cierre:{what:'Histéresis: salta por encima de 6 min, pero solo se cierra cuando la mediana lleva 5 min en 5 min o menos y ningún paciente pasa de 15. Así no se enciende y apaga en los días límite. Después pide feedback.',
+  acuse:{what:'La responsable de enfermería pulsa «Asumo» y activa el 2.º box. Si no responde en 5 min, recibe un recordatorio; a los 10 min sin acuse, escala a Dirección de Enfermería.',
+    params:['ackRecordatorio','ackEscala'], q:['¿Basta con leerlo o exigimos pulsar?']},
+  silencio:{what:'Tras asumirla, la alerta deja de avisar 20 min para que el 2.º box haga efecto. Si se cumple la condición de cierre 5 min seguidos, se cierra sin esperar.',
+    params:['silencio'], q:['¿20 min es el tiempo que tarda en notarse el 2.º box?']},
+  reevaluacion:{what:'Al acabar el silencio se revisa. Si la demora ya no supera el umbral, se vigila hasta el cierre. Si persiste pero ha mejorado respecto al momento del acuse, se dan 10 min más de seguimiento. Si persiste sin mejorar, escala a Dirección de Enfermería.',
+    params:['seguimientoExtra'], q:['¿Qué cuenta como «mejorar»: menos pacientes, menor mediana o las dos?']},
+  escalado:{what:'Escala a Dirección de Enfermería en dos casos: nadie asume la alerta en 10 min, o persiste la demora tras el silencio. Dirección envía refuerzo. Si no responde en 5 min, queda como incidencia.',
+    params:['ackEscala'], q:['¿Se informa a la responsable y a la dinamizadora de que ha escalado?','¿Quién es Dirección de Enfermería de noche y en festivos?']},
+  cierre:{what:'Histéresis: salta por encima de 6 min, pero solo se cierra cuando la mediana lleva 5 min en 5 min o menos y ningún paciente pasa de 15. Después pide feedback a quien la asumió.',
     params:['umbralCierre','cierreEstable'], q:['¿El feedback es obligatorio o voluntario?','¿Quién revisa el feedback y cada cuánto se ajustan los umbrales?']},
   anulacion:{what:'Quien la recibe puede anularla eligiendo un motivo de una lista cerrada. Durante el bloqueo no vuelve a saltar y el motivo queda registrado.',
-    params:['bloqueoAnul'], reasons:true, q:['¿Quién puede anular: la dinamizadora o solo la responsable?','¿El bloqueo es fijo o depende del motivo?']}
+    params:['bloqueoAnul'], reasons:true, q:['¿Quién puede anular: solo la responsable o también Dirección?','¿El bloqueo es fijo o depende del motivo?']}
 };
 
 const $=id=>document.getElementById(id);
@@ -752,14 +774,14 @@ function buildFlow(){
 function nodeSub(id){
   const rem=x=>Math.max(0,x-S.t);
   switch(id){
-    case 'monitor': return S.shadow?'modo sombra':(S.alert==='normal'&&S.suppressUntil==null?'vigilando · cada 1 min':'cada 1 min · HIS');
-    case 'disparo': return S.alert==='pre'?`se mantiene ${S.persist}/${cfg.persist} min`:(S.alert==='sombra'?'sombra · sin avisar':`>${cfg.umbralMediana} min · 1 pac >${cfg.esperaMax}`);
-    case 'notificacion': return S.alert==='informada'?`informativa · alerta en ${rem(S.episode.infoAt+cfg.infoMax)} min`:(S.episode&&S.notified.size?`${S.notified.size} persona${S.notified.size>1?'s':''} avisada${S.notified.size>1?'s':''}`:'dinamizadora');
-    case 'acuse': return S.alert==='notificada'&&!S.escLevel&&!S.respIn?`responsable en ${rem(S.notifiedAt+cfg.ackMax)} min`:`${cfg.ackMax} min → responsable`;
+    case 'monitor': return S.shadow?'modo sombra':(S.alert==='normal'&&S.suppressUntil==null?'vigilando la mediana':'cada 1 min · HIS');
+    case 'disparo': return S.alert==='pre'?`se mantiene ${S.persist}/${cfg.persist} min`:(S.alert==='sombra'?'sombra · sin avisar':`>${cfg.umbralPacientes} pac · 1 >${cfg.esperaMax} min`);
+    case 'notificacion': return S.alert==='informada'?`informativa · alerta en ${rem(S.episode.infoAt+cfg.infoMax)} min`:(S.episode&&S.notified.size?'responsable + copia':'responsable');
+    case 'acuse': return S.alert==='notificada'&&!S.escLevel?(S.reminded?`Dirección en ${rem(S.notifiedAt+cfg.ackEscala)} min`:`recordatorio en ${rem(S.notifiedAt+cfg.ackRecordatorio)} min`):'activar 2.º box';
     case 'silencio': return S.alert==='silencio'?`quedan ${rem(S.silenceEnd)} min`:`${cfg.silencio} min`;
-    case 'reevaluacion': return S.reactivations?`${S.reactivations} reactivación${S.reactivations>1?'es':''}`:'al acabar el silencio';
-    case 'escalado': return S.escLevel?'Dirección avisada':(S.respIn?'responsable avisada':(S.episode&&S.episode.fired!=null?`Dirección en ${Math.max(0,S.episode.fired+cfg.escSostenida-S.t)} min`:`5 min · 20 min`));
-    case 'cierre': return S.stable&&(S.alert==='estabilizando'||S.alert==='informada'||S.alert==='silencio')?`estable ${S.stable}/${cfg.cierreEstable} min`:`≤${cfg.umbralCierre} min · ${cfg.cierreEstable} min`;
+    case 'reevaluacion': return S.alert==='seguimiento'?`seguimiento: ${rem(S.followEnd)} min`:(S.reactivations?`${S.reactivations} reactivación${S.reactivations>1?'es':''}`:'¿persiste?');
+    case 'escalado': return S.escLevel?'Dirección avisada':'si persiste o sin acuse';
+    case 'cierre': return S.stable&&['estabilizando','informada','silencio','seguimiento'].includes(S.alert)?`estable ${S.stable}/${cfg.cierreEstable} min`:`≤${cfg.umbralCierre} min · ${cfg.cierreEstable} min`;
     case 'anulacion': return S.suppressUntil!=null?`bloqueo ${rem(S.suppressUntil)} min`:'con motivo';
   }
 }
@@ -781,7 +803,7 @@ function renderFlow(){
   });
 }
 
-const STATE_TXT={normal:'En vigilancia', pre:'Comprobando que se mantiene', sombra:'Modo sombra · no se avisa', informada:'Aviso informativo enviado', notificada:'Avisada · esperando que alguien la asuma', silencio:'Asumida · silenciada', estabilizando:'Normalizándose · cuenta para cierre'};
+const STATE_TXT={normal:'En vigilancia', pre:'Comprobando que se mantiene', sombra:'Modo sombra · no se avisa', seguimiento:'Persiste pero mejora · 10 min más', informada:'Aviso informativo enviado', notificada:'Avisada · esperando que alguien la asuma', silencio:'Asumida · silenciada', estabilizando:'Normalizándose · cuenta para cierre'};
 function renderStatus(){
   const sh=shift(S.t);
   $('sClock').textContent=clock(S.t);
@@ -808,7 +830,7 @@ function renderStatus(){
 function renderTabs(){
   $('roleTabs').innerHTML=ROLE_ORDER.map(r=>{
     const n=S.msgs[r].filter(m=>m.pending).length;
-    return `<button type="button" class="role-tab" role="tab" aria-selected="${r===viewRole}" data-role="${r}">${ROLES[r].short}${n?`<span class="badge">${n}</span>`:''}</button>`;
+    return `<button type="button" class="role-tab" role="tab" style="--rc:${ROLES[r].color}" aria-selected="${r===viewRole}" data-role="${r}">${ROLES[r].short}${n?`<span class="badge">${n}</span>`:''}</button>`;
   }).join('');
 }
 function renderPhone(){
@@ -818,6 +840,7 @@ function renderPhone(){
     lastMsgSeq=S.msgSeq;
   }
   renderTabs();
+  document.querySelector('.phone').style.borderColor=ROLES[viewRole].color; document.querySelector('.ava').style.background=ROLES[viewRole].color;
   $('phWho').textContent='Para: '+roleName(viewRole);
   const list=S.msgs[viewRole];
   const body=$('phBody');
@@ -843,7 +866,7 @@ function renderPhone(){
     return `<div class="bubble" data-lv="${m.lv||''}"><div class="bt">${esc(m.title)}</div>
       ${m.kind!=='feedback'?'<div class="ctx">Urgencias adultos · espera hasta triaje</div>':''}
       ${m.lines.map(l=>`<p class="ln">${esc(l)}</p>`).join('')}
-      ${m.note?`<p class="ln note">${esc(m.note)}</p>`:''}${acts}${st}<div class="tm">${clock(m.t)}</div></div>`;
+      ${m.note?`<p class="ln note">${esc(m.note)}</p>`:''}${m.action?`<p class="ln act-l">Acción: ${esc(m.action)}</p>`:''}${acts}${st}<div class="tm">${clock(m.t)}</div></div>`;
   }).join('');
   body.scrollTop=body.scrollHeight;
 }
@@ -856,11 +879,12 @@ function renderConfig(){
   }
   if(inf.fixed) h+=`<p class="fixed">${esc(inf.fixed)}</p>`;
   if(inf.roster){
-    h+=`<div><p class="sect-t">A quién avisa (por cargo)</p><div style="overflow-x:auto"><table class="roster"><thead><tr><th>Situación</th><th>Destinatarios</th><th>Respuesta</th></tr></thead><tbody>
-      <tr><td>Informativa (≤ ${cfg.umbralPacientes} pac.)</td><td>Dinamizadora y Responsable de enfermería</td><td>No hace falta</td></tr>
-      <tr><td>Alerta</td><td>Dinamizadora (responsable de la alerta, acude a sala)</td><td>Asumir o anular</td></tr>
-      <tr><td>Sin acuse ${cfg.ackMax} min</td><td>+ Responsable de enfermería de Urgencias</td><td>Asumir o anular</td></tr>
-      <tr><td>Sostenida ${cfg.escSostenida} min</td><td>+ Dirección de Enfermería</td><td>Asumir y reforzar</td></tr></tbody></table></div></div>`;
+    const dot=r=>`<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${ROLES[r].color};margin-right:6px"></span>`;
+    h+=`<div><p class="sect-t">A quién avisa (por cargo)</p><div style="overflow-x:auto"><table class="roster"><thead><tr><th>Situación</th><th>Destinatarios</th><th>Qué hace</th></tr></thead><tbody>
+      <tr><td>Informativa (≤ ${cfg.umbralPacientes} pac.)</td><td>${dot('din')}Dinamizadora<br>${dot('resp')}Responsable de enfermería</td><td>Nada: solo informa</td></tr>
+      <tr><td>Alerta</td><td>${dot('resp')}Responsable de enfermería (dueña)<br>${dot('din')}Dinamizadora en copia</td><td>Activar 2.º box · acudir a la sala</td></tr>
+      <tr><td>Sin acuse ${cfg.ackRecordatorio} / ${cfg.ackEscala} min</td><td>Recordatorio · luego ${dot('dir')}Dirección de Enfermería</td><td>Asumir</td></tr>
+      <tr><td>Persiste tras ${cfg.silencio} min</td><td>${dot('dir')}Dirección de Enfermería</td><td>Enviar refuerzo</td></tr></tbody></table></div></div>`;
   }
   if(inf.reasons) h+=`<div><p class="sect-t">Motivos de anulación</p><ul class="reasons">${REASONS.map(r=>`<li>${esc(r)}</li>`).join('')}</ul></div>`;
   h+=`<div><p class="sect-t">Para validar con el equipo</p><ul class="qs">${inf.q.map(q=>`<li>${esc(q)}</li>`).join('')}</ul></div>`;
@@ -908,7 +932,8 @@ function renderEpisode(){
     ['Detectado', clock(e.start)],
     ['Tipo', e.fired!=null?(e.infoAt!=null?`informativa ${clock(e.infoAt)} → alerta ${clock(e.fired)}`:`alerta ${clock(e.fired)}`):(e.infoAt!=null?`informativa ${clock(e.infoAt)}`:'comprobando')],
     ['Asumida', e.firstAck!=null&&e.fired!=null?`a los ${e.firstAck-e.fired} min · ${ROLES[e.ackBy].short}`:'—'],
-    ['Responsable avisada', e.respAt!=null?`${clock(e.respAt)} (sin acuse en ${cfg.ackMax} min)`:'no hizo falta'],
+    ['Recordatorio', e.remindAt!=null?`${clock(e.remindAt)} (sin acuse en ${cfg.ackRecordatorio} min)`:'no hizo falta'],
+    ['10 min de seguimiento extra', e.extra?'sí (mejoraba)':'no'],
     ['Reactivaciones', reacts],
     ['Escalado', escl?'Dirección de Enfermería':'no'],
     ['Duración', e.fired!=null?dur:(((live?S.t:e.end)-(e.infoAt??e.start))+' min')]
